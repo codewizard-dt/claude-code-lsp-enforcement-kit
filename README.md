@@ -237,17 +237,34 @@ Tracks successful LSP calls in a per-project state file. Other hooks read this s
 
 **Cold start handling:** Detects the cclsp "No Project" error (upstream bug where `find_workspace_symbols` doesn't prime the TypeScript project). Emits a `systemMessage` with the correct fix — call a file-based tool first. It's an ordering bug, not a timing issue.
 
-## Setup
+## Installation
 
-### Prerequisites
+### Quick Install (let Claude Code do it)
+
+Clone this repo and tell Claude Code:
+
+```
+Install the LSP enforcement hooks from this repo into my ~/.claude/ setup.
+Read the README for instructions.
+```
+
+Claude Code will read this README and follow the steps below automatically.
+
+**Important for Claude Code:** When modifying `~/.claude/settings.json`, you MUST **merge** the hook entries into any existing `hooks` configuration. Do NOT overwrite the file. Read the current `settings.json` first, then add the new entries alongside existing ones.
+
+---
+
+### Manual Setup
+
+#### Prerequisites
 
 - Claude Code (CLI, Desktop, or IDE extension)
 - `typescript-lsp` plugin enabled (built-in)
 - TypeScript/JavaScript project
 
-### Step 1: Enable the Plugin
+#### Step 1: Enable the Plugin
 
-In `~/.claude/settings.json`:
+In `~/.claude/settings.json`, ensure `enabledPlugins` includes:
 
 ```json
 {
@@ -257,82 +274,57 @@ In `~/.claude/settings.json`:
 }
 ```
 
-### Step 2: Add the Rule
-
-Create `~/.claude/rules/lsp-first.md` (or copy from [`rules/lsp-first.md`](rules/lsp-first.md)):
-
-```markdown
-# LSP-First Navigation (CRITICAL)
-
-When cclsp MCP connected, ALL agents MUST use LSP over Grep for semantic navigation.
-
-| Task | LSP Tool |
-|------|----------|
-| Definition | `find_definition` |
-| References | `find_references` |
-| Symbol search | `find_workspace_symbols` |
-| Implementations | `find_implementation` |
-| Call hierarchy | `get_incoming_calls` / `get_outgoing_calls` |
-| Type info | `get_hover` |
-| Diagnostics | `get_diagnostics` |
-
-Grep/Glob = fallback ONLY when LSP returns empty or searching non-symbol text.
-```
-
-### Step 3: Copy Hook Files
+#### Step 2: Copy Hook Files
 
 ```bash
+mkdir -p ~/.claude/hooks ~/.claude/state ~/.claude/rules
 cp hooks/*.js ~/.claude/hooks/
+cp rules/lsp-first.md ~/.claude/rules/
 ```
 
-### Step 4: Register Hooks
+#### Step 3: Register Hooks in settings.json
 
-Add to `~/.claude/settings.json` under `hooks`:
+**IMPORTANT:** If you already have hooks in `~/.claude/settings.json`, **add** these entries to your existing arrays — don't replace them.
+
+Add to `PreToolUse` array:
 
 ```json
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Grep",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-first-guard.js" }]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/bash-grep-block.js" }]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-first-read-guard.js" }]
-      },
-      {
-        "matcher": "Agent",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-pre-delegation.js" }]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "mcp__cclsp__find_definition|mcp__cclsp__find_references|mcp__cclsp__find_workspace_symbols|mcp__cclsp__find_implementation|mcp__cclsp__get_hover|mcp__cclsp__get_diagnostics|mcp__cclsp__get_incoming_calls|mcp__cclsp__get_outgoing_calls",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-usage-tracker.js" }]
-      }
-    ]
-  }
+  "matcher": "Grep",
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-first-guard.js" }]
+},
+{
+  "matcher": "Bash",
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/bash-grep-block.js" }]
+},
+{
+  "matcher": "Read",
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-first-read-guard.js" }]
+},
+{
+  "matcher": "Agent",
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-pre-delegation.js" }]
 }
 ```
 
-### Step 5: Create State Directory
+Add to `PostToolUse` array:
 
-```bash
-mkdir -p ~/.claude/state
+```json
+{
+  "matcher": "mcp__cclsp__find_definition|mcp__cclsp__find_references|mcp__cclsp__find_workspace_symbols|mcp__cclsp__find_implementation|mcp__cclsp__get_hover|mcp__cclsp__get_diagnostics|mcp__cclsp__get_incoming_calls|mcp__cclsp__get_outgoing_calls",
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-usage-tracker.js" }]
+}
 ```
 
-### Step 6: Verify
+#### Step 4: Verify
 
-```bash
-claude
-# Ask: "Where is handleSubmit defined?"
-# Expected: Claude uses find_definition, NOT Grep
+Restart Claude Code, then ask:
+
 ```
+Where is handleSubmit defined?
+```
+
+Expected: Claude uses `find_definition`, NOT Grep. If it tries Grep, you'll see the block message.
 
 ## LSP Tool Reference
 
