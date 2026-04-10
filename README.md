@@ -57,6 +57,17 @@ Aggregate from a week of development across 2 TypeScript projects:
 - Without LSP: ~120 Greps + ~180 Reads = ~315k tokens for the same navigation work
 - With LSP: 39 nav calls + 53 targeted Reads = ~84k tokens
 
+## Works with any LSP MCP server
+
+v2.1 introduces **provider-aware block messages**. The kit detects which LSP MCP server(s) you have installed and tailors its suggestions accordingly:
+
+- [**cclsp**](https://github.com/ktnyt/cclsp) — standalone MCP server or bundled via the `typescript-lsp` Claude Code plugin. Suggestions use `mcp__cclsp__find_definition`, `find_references`, `find_workspace_symbols`, etc.
+- [**Serena**](https://github.com/oraios/serena) — high-level symbol MCP server (MIT, by Oraios AI). Multi-language support (Python, Go, Rust, Java, TypeScript, Vue, and more via its bundled `solidlsp` wrapper). Suggestions use `mcp__serena__find_symbol`, `find_referencing_symbols`, `get_symbols_overview`.
+- **Both installed** — suggestions show entries for both providers.
+- **Neither installed** — generic fallback with install hints for both.
+
+Detection reads user-level Claude Code config (`~/.claude.json`, `~/.claude/settings.json`) and matches known server names. The shared helper is in `hooks/lib/detect-lsp-provider.js` — adding a new provider means adding one entry to its `PROVIDERS` registry, with no changes to the individual hooks.
+
 ## Architecture: 6 Hooks + 1 Tracker
 
 ```
@@ -125,16 +136,16 @@ Intercepts every Grep call. Detects code symbols in the pattern. Blocks with a s
 | `*.md`, `*.json`, `*.sql` | non-code file glob | allow |
 | `.task/`, `node_modules/` | non-code path | allow |
 
-**Block message example:**
+**Block message example** (with both cclsp and Serena detected):
 ```
 ⛔ LSP-FIRST BLOCK: 1 code symbol(s) in Grep — use LSP instead
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Symbols: handleSubmit
 LSP tools:
-  mcp__cclsp__find_references("handleSubmit")  → all usages
-  mcp__cclsp__find_definition("handleSubmit")  → go to definition
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  handleSubmit:
+    mcp__cclsp__find_references("handleSubmit")  (cclsp)
+    mcp__serena__find_referencing_symbols("handleSubmit")  (Serena)
 ```
+If only one provider is installed, only that suggestion appears.
 
 ### 2. `lsp-first-glob-guard.js` — Glob Symbol Blocker
 
@@ -322,13 +333,13 @@ Run bash install.sh in this repo to set up LSP enforcement hooks.
 ```
 
 The install script:
-- Copies 7 hooks to `~/.claude/hooks/`
+- Copies 7 hooks + shared `lib/detect-lsp-provider.js` helper to `~/.claude/hooks/`
 - Copies the LSP-first rule to `~/.claude/rules/`
 - **Merges** hook registrations into your existing `~/.claude/settings.json` (won't overwrite your other hooks)
 - Enables the built-in `typescript-lsp` plugin
 - Creates `~/.claude/state/` for tracking
 - Verifies everything at the end
-- Safe to re-run: entries are deduped by command path, so upgrading from v1 to v2 just adds the two new hooks without touching anything else
+- Safe to re-run: entries are deduped by command path, so upgrading from v1/v2.0 to v2.1 just adds what's missing without touching anything else
 
 ### Option 2: Run the script yourself
 
@@ -343,7 +354,7 @@ Output:
 === LSP Enforcement Kit — Install ===
 
 [1/4] Directories ready
-[2/4] Copied 7 hooks + 1 rule
+[2/4] Copied 7 hooks + lib + 1 rule
 [3/4] settings.json updated (merged, not overwritten)
 [4/4] Verifying...
 
@@ -533,7 +544,19 @@ Claude Code subagents cannot access MCP tools (architectural limitation). Withou
 `find_workspace_symbols` fails with "No Project" if called before any file-based LSP tool (cclsp upstream bug). The tracker detects this and tells Claude to call `get_diagnostics` first. Not a timing issue — ordering issue.
 
 **Q: I installed v1 and shared it with my team — should I upgrade?**
-Yes. v1 had two silent bypass routes (Glob symbol search and stale session state) that let Claude navigate code without ever calling LSP. Both are closed in v2. Just re-run `bash install.sh` — it's idempotent and only adds the two missing hook entries to your `settings.json`. No existing configuration is touched.
+Yes. v1 had two silent bypass routes (Glob symbol search and stale session state) that let Claude navigate code without ever calling LSP. Both are closed in v2. Just re-run `bash install.sh` — it's idempotent and only adds the missing hook entries to your `settings.json`. No existing configuration is touched.
+
+**Q: Does this work with Serena?**
+Yes. Since **v2.1**, the kit detects your LSP MCP provider and tailors its block-message suggestions. If you run [Serena](https://github.com/oraios/serena) (the multi-language MCP symbol toolkit by Oraios AI — MIT), the hooks will point you at `mcp__serena__find_symbol`, `find_referencing_symbols`, and `get_symbols_overview` instead of cclsp tools. The enforcement logic (Grep/Glob/Read/Agent gates, session reset) is provider-agnostic — it works the same for both. You can also run cclsp and Serena side-by-side; suggestions then show both.
+
+This is pure interop — the kit ships no Serena code, uses only their public tool names in suggestion strings, and reads only your own config to detect which provider is active.
+
+**Q: What about Python/Go/Rust? cclsp is TypeScript-only.**
+Two options:
+1. Install a standalone `cclsp` MCP server with multi-language config (see the "Optional" section above), OR
+2. Install [Serena](https://github.com/oraios/serena) — it bundles `solidlsp`, a unified wrapper around language servers for Python, Go, Rust, Java, TypeScript, Vue, PHP, Ruby, Swift, Elixir, Clojure, Bash, PowerShell, and more. The kit will detect Serena automatically and adapt its suggestions.
+
+The hook detection logic itself is language-agnostic — it works on naming conventions (PascalCase, camelCase, snake_case), not language-specific ASTs.
 
 ## License
 

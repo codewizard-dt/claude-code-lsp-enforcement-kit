@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { buildWarmupInstructions } = require('./lib/detect-lsp-provider');
 
 const STATE_DIR = path.join(os.homedir(), '.claude', 'state');
 const CODE_EXTENSIONS = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|vue|svelte|cpp|c|h|hpp)$/i;
@@ -53,7 +54,8 @@ process.stdin.on('end', () => {
   try { data = JSON.parse(raw); } catch { process.exit(0); }
   if (data.tool_name !== 'Read') process.exit(0);
 
-  const filePath = (data.tool_input?.file_path || '').trim();
+  // String coercion: non-string input would throw on .trim() and fail-open.
+  const filePath = String(data.tool_input?.file_path ?? '').trim();
   if (!filePath) process.exit(0);
 
   if (ALLOW_NON_CODE_EXT.test(filePath)) process.exit(0);
@@ -66,14 +68,12 @@ process.stdin.on('end', () => {
   const flag = readFlag(flagPath);
 
   if (!flag || !flag.warmup_done) {
+    const warmupLines = buildWarmupInstructions('  ').join('\n');
     emitBlock(
       `⛔ LSP-FIRST BLOCK (Gate 1 — Warmup Required)\n\n` +
-      `Read on code file requires prior cclsp LSP warmup.\n\n` +
-      `WARMUP PROTOCOL:\n` +
-      `  1. Glob(pattern: "src/**/*.ts", head_limit: 1)\n` +
-      `  2. mcp__cclsp__get_diagnostics(<file from step 1>)\n` +
-      `  3. If "No Project" error → retry step 2\n` +
-      `  4. Once diagnostics succeeds → LSP is warm\n\n` +
+      `Read on code file requires prior LSP warmup.\n\n` +
+      `WARMUP PROTOCOL — call one of these first:\n` +
+      `${warmupLines}\n\n` +
       `After warmup: ${FREE_READS} free Reads, then need LSP navigation.\n\n` +
       `Blocked: ${filePath}\n`
     );

@@ -27,8 +27,9 @@ process.stdin.on('end', () => {
   if (data.tool_name !== 'Agent') process.exit(0);
 
   const toolInput = data.tool_input || {};
-  const prompt = toolInput.prompt || '';
-  const subagentType = toolInput.subagent_type || '';
+  // String coercion: non-string fields would throw on subsequent string methods.
+  const prompt = String(toolInput.prompt ?? '');
+  const subagentType = String(toolInput.subagent_type ?? '');
   const isForcedExplorer = FORCE_LSP_CONTEXT_AGENTS.includes(subagentType);
 
   if (!isForcedExplorer) {
@@ -38,8 +39,8 @@ process.stdin.on('end', () => {
 
   if (prompt.length < 200) process.exit(0);
 
-  const isolation = toolInput.isolation || '';
-  const cwd = data.cwd || process.cwd();
+  const isolation = String(toolInput.isolation ?? '');
+  const cwd = String(data.cwd ?? process.cwd());
   const taskDir = path.join(cwd, '.task');
 
   if (!isForcedExplorer && isolation !== 'worktree') {
@@ -91,12 +92,13 @@ process.stdin.on('end', () => {
   const agentLabel = isForcedExplorer ? `explorer "${subagentType}"` : 'implement agent';
   process.stderr.write(
     `\n⛔ LSP PRE-DELEGATION BLOCK: ${agentLabel} launched WITHOUT LSP CONTEXT\n` +
-    `Subagents have NO LSP/MCP access. Resolve symbols first, add "## LSP CONTEXT" to prompt.\n\n`
+    `Subagents have NO LSP/MCP access. Resolve symbols first (via cclsp, Serena,\n` +
+    `or any LSP MCP tools available), then add "## LSP CONTEXT" to the agent prompt.\n\n`
   );
 
   const decision = (isForcedExplorer || isolation === 'worktree') ? 'block' : 'warn';
   console.log(JSON.stringify({
     decision,
-    reason: `LSP PRE-DELEGATION: ${agentLabel} without "## LSP CONTEXT". Use cclsp first.`
+    reason: `LSP PRE-DELEGATION: ${agentLabel} without "## LSP CONTEXT". Use LSP MCP tools first.`
   }));
 });

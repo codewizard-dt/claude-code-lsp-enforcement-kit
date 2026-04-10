@@ -12,13 +12,14 @@ echo "=== LSP Enforcement Kit — Install ==="
 echo ""
 
 # 1. Create directories
-mkdir -p "$HOOKS_DIR" "$RULES_DIR" "$STATE_DIR"
+mkdir -p "$HOOKS_DIR" "$HOOKS_DIR/lib" "$RULES_DIR" "$STATE_DIR"
 echo "[1/4] Directories ready"
 
-# 2. Copy hooks and rule
+# 2. Copy hooks + shared lib + rule
 cp "$SCRIPT_DIR/hooks/"*.js "$HOOKS_DIR/"
+cp "$SCRIPT_DIR/hooks/lib/"*.js "$HOOKS_DIR/lib/"
 cp "$SCRIPT_DIR/rules/lsp-first.md" "$RULES_DIR/"
-echo "[2/4] Copied 7 hooks + 1 rule"
+echo "[2/4] Copied 7 hooks + lib + 1 rule"
 
 # 3. Merge into settings.json (node for safe JSON manipulation)
 node -e "

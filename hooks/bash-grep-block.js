@@ -3,7 +3,14 @@
 
 // bash-grep-block.js — PreToolUse hook (matcher: Bash)
 // Blocks grep/rg/ag/ack with code symbols in shell commands.
+// Suggests LSP equivalent for the active provider (cclsp / Serena / ...).
 // Allows: git grep, non-code paths, non-code file types.
+
+const { buildSuggestion } = require('./lib/detect-lsp-provider');
+
+// Zero-width / formatting chars that would split tokens invisibly and
+// bypass ASCII regex symbol detection.
+const ZERO_WIDTH = /[\u00AD\u200B-\u200F\u2060-\u2064\uFEFF]/g;
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -13,22 +20,30 @@ process.stdin.on('end', () => {
   try { data = JSON.parse(raw); } catch { process.exit(0); }
   if (data.tool_name !== 'Bash') process.exit(0);
 
-  const cmd = (data.tool_input?.command || '').trim();
-  if (!/\b(grep|rg|ag|ack)\b/.test(cmd)) process.exit(0);
-  if (/\bgit\s+grep\b/.test(cmd)) process.exit(0);
-  if (/supabase[\\/]migrations|\.task[\\/]|\.claude[\\/]|node_modules|knowledge-vault/i.test(cmd)) process.exit(0);
+  // String coercion: non-string command would throw on .trim() and fail-open.
+  // Zero-width strip: prevents `grep\u200BUserFunc` evasion.
+  const cmd = String(data.tool_input?.command ?? '').trim().replace(ZERO_WIDTH, '');
+  // Case-insensitive to catch `GREP`, `RG` variants
+  if (!/\b(grep|rg|ag|ack)\b/i.test(cmd)) process.exit(0);
+  if (/\bgit\s+grep\b/i.test(cmd)) process.exit(0);
+  if (/(?:^|[\/\\])(?:supabase[\/\\]migrations|\.task|\.claude|node_modules|knowledge-vault)(?:[\/\\]|$)/i.test(cmd)) process.exit(0);
   if (/--include=?\S*\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log)\b/i.test(cmd)) process.exit(0);
 
   const cleaned = cmd.replace(/\\"/g, '"');
   const patternMatch =
-    cleaned.match(/\b(?:grep|rg|ag|ack)\s+(?:-\S+\s+)*"([^"]+)"/) ||
-    cleaned.match(/\b(?:grep|rg|ag|ack)\s+(?:-\S+\s+)*'([^']+)'/) ||
-    cleaned.match(/\b(?:grep|rg|ag|ack)\s+(?:(?:-\w+\s+(?:[a-z]+\s+)?)*?)([A-Z][a-zA-Z]\w+)/);
+    cleaned.match(/\b(?:grep|rg|ag|ack)\s+(?:-\S+\s+)*"([^"]+)"/i) ||
+    cleaned.match(/\b(?:grep|rg|ag|ack)\s+(?:-\S+\s+)*'([^']+)'/i) ||
+    cleaned.match(/\b(?:grep|rg|ag|ack)\s+(?:(?:-\w+\s+(?:[a-z]+\s+)?)*?)([A-Z][a-zA-Z]\w+)/i);
 
   if (!patternMatch) process.exit(0);
 
   const fullPattern = patternMatch[1];
-  const parts = fullPattern.split(/\\?\|/).map(p => p.replace(/[.*+?^${}()[\]\\]/g, '').trim()).filter(Boolean);
+  // Strip zero-width chars from the matched pattern (already stripped from cmd,
+  // but an explicit safety for pattern extraction edge cases).
+  const parts = fullPattern
+    .split(/\\?\|/)
+    .map(p => p.replace(ZERO_WIDTH, '').replace(/[.*+?^${}()[\]\\]/g, '').trim())
+    .filter(Boolean);
   const symbols = parts.filter(p => {
     if (p.length < 4 || /\s/.test(p)) return false;
     const skip = [
@@ -44,24 +59,18 @@ process.stdin.on('end', () => {
            (/^[a-z]+(_[a-z]+){2,}$/.test(p) && p.length >= 9);
   });
 
-  if (symbols.length === 0) process.exit(0);
+  // SECURITY: only allow the safe-prefix pipe bypass AFTER confirming no code symbols.
+  // Previously `echo x | grep SomeCamelFunc` passed because the bypass ran before
+  // symbol detection. Now: if symbols present, no bypass — always proceed to block.
+  if (symbols.length === 0) {
+    const targetsCodeEarly =
+      /\bsrc[\\/]|\bapp[\\/]|components[\\/]|lib[\\/]|hooks[\\/]|utils[\\/]|services[\\/]|actions[\\/]/i.test(cmd) ||
+      /\.tsx?\b|\.jsx?\b/i.test(cmd);
+    const hasNonCodeTargetEarly = /\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log|toml|xml)\b/i.test(cmd) && !targetsCodeEarly;
+    if (hasNonCodeTargetEarly) process.exit(0);
 
-  const targetsCode =
-    /\bsrc[\\/]|\bapp[\\/]|components[\\/]|lib[\\/]|hooks[\\/]|utils[\\/]|services[\\/]|actions[\\/]/i.test(cmd) ||
-    /\.tsx?\b|\.jsx?\b/i.test(cmd) ||
-    /-t\s+(ts|tsx|js|jsx|typescript|javascript)\b/i.test(cmd) ||
-    /--type[= ](ts|tsx|js|jsx|typescript)\b/i.test(cmd) ||
-    /\bfind\b.*\b(src|app|components|lib)\b/.test(cmd) ||
-    /\bxargs\b.*\b(grep|rg|ag|ack)\b/.test(cmd) ||
-    /-exec\s+(grep|rg|ag|ack)\b/.test(cmd);
-
-  const hasNonCodeTarget =
-    /\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log|toml|xml)\b/i.test(cmd) &&
-    !targetsCode;
-
-  if (!targetsCode && !hasNonCodeTarget) {
     const isSimplePipe = /\|/.test(cmd) && !/xargs|exec/.test(cmd);
-    const grepPos = cmd.search(/\b(grep|rg|ag|ack)\b/);
+    const grepPos = cmd.search(/\b(grep|rg|ag|ack)\b/i);
     const pipePos = cmd.indexOf('|');
     if (isSimplePipe && pipePos !== -1 && pipePos < grepPos) {
       const beforePipe = cmd.substring(0, pipePos).trim();
@@ -70,22 +79,38 @@ process.stdin.on('end', () => {
         process.exit(0);
       }
     }
-  } else if (hasNonCodeTarget) {
     process.exit(0);
   }
 
-  const suggestions = symbols.map(s => {
-    const tool = /^[A-Z]/.test(s) ? 'find_workspace_symbols' : 'find_references';
-    return `mcp__cclsp__${tool}("${s}")`;
-  }).join(', ');
+  const targetsCode =
+    /\bsrc[\\/]|\bapp[\\/]|components[\\/]|lib[\\/]|hooks[\\/]|utils[\\/]|services[\\/]|actions[\\/]/i.test(cmd) ||
+    /\.tsx?\b|\.jsx?\b/i.test(cmd) ||
+    /-t\s+(ts|tsx|js|jsx|typescript|javascript)\b/i.test(cmd) ||
+    /--type[= ](ts|tsx|js|jsx|typescript)\b/i.test(cmd) ||
+    /\bfind\b.*\b(src|app|components|lib)\b/.test(cmd) ||
+    /\bxargs\b.*\b(grep|rg|ag|ack)\b/i.test(cmd) ||
+    /-exec\s+(grep|rg|ag|ack)\b/i.test(cmd);
+
+  const hasNonCodeTarget =
+    /\.(sql|md|json|yaml|yml|txt|env|sh|css|scss|log|toml|xml)\b/i.test(cmd) &&
+    !targetsCode;
+
+  // Symbols are present — only bypass if the command is unambiguously
+  // targeting non-code files AND doesn't touch code paths.
+  if (hasNonCodeTarget && !targetsCode) process.exit(0);
+
+  const suggestions = symbols.map(sym => {
+    const intent = /^[A-Z]/.test(sym) ? 'symbol_search' : 'references';
+    return `  ${sym}:\n${buildSuggestion(sym, intent, '    ')}`;
+  }).join('\n');
 
   process.stderr.write(
     `\n⛔ LSP-FIRST: Blocked grep/rg — found ${symbols.length} code symbol(s): ${symbols.join(', ')}\n` +
-    `LSP is always connected. Use: ${suggestions}\n\n`
+    `LSP is always connected. Use:\n${suggestions}\n\n`
   );
 
   console.log(JSON.stringify({
     decision: 'block',
-    reason: `LSP-FIRST: Pattern contains code symbols [${symbols.join(', ')}]. Use LSP: ${suggestions}`
+    reason: `LSP-FIRST: Pattern contains code symbols [${symbols.join(', ')}]. Use LSP:\n${suggestions}`
   }));
 });

@@ -20,10 +20,12 @@
  *   - camelCase symbol:          *createOrder*, *handleSubmit*
  *   - snake_case function (3+):  *get_user_sessions*, *write_audit_log*
  *
- * Philosophy: if you know the symbol name, use LSP
- *   (mcp__cclsp__find_workspace_symbols). Glob is for broad file discovery
+ * Philosophy: if you know the symbol name, use LSP (find_workspace_symbols
+ *   for cclsp, find_symbol for Serena). Glob is for broad file discovery
  *   by extension or concept, not for symbol-based search.
  */
+
+const { buildSuggestion } = require('./lib/detect-lsp-provider');
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -34,18 +36,17 @@ process.stdin.on('end', () => {
 
   if (data.tool_name !== 'Glob') process.exit(0);
 
-  const pattern = (data.tool_input?.pattern || '').trim();
+  // String coercion: non-string input would throw on .trim() and fail-open.
+  const pattern = String(data.tool_input?.pattern ?? '').trim();
   if (!pattern) process.exit(0);
 
-  const searchPath = (data.tool_input?.path || '').trim();
+  const searchPath = String(data.tool_input?.path ?? '').trim();
 
-  // ── Allow: non-code paths ────────────────────────────────────────────────
-  if (/knowledge-vault|\.task[\\/]|\.claude[\\/]|node_modules|supabase[\\/]migrations|\.git[\\/]/i.test(searchPath)) {
-    process.exit(0);
-  }
-  if (/knowledge-vault|\.task[\\/]|\.claude[\\/]|node_modules|supabase[\\/]migrations/i.test(pattern)) {
-    process.exit(0);
-  }
+  // ── Allow: non-code paths (anchored — bare substring would let
+  //    "myknowledge-vaultxxx" bypass detection) ──────────────────────────
+  const NON_CODE_PATH = /(?:^|[\/\\])(?:knowledge-vault|\.task|\.claude|node_modules|supabase[\/\\]migrations|\.git)(?:[\/\\]|$)/i;
+  if (NON_CODE_PATH.test(searchPath)) process.exit(0);
+  if (NON_CODE_PATH.test(pattern)) process.exit(0);
 
   // Extract alphabetic tokens from the pattern (strip *, /, ., brackets, etc.)
   const tokens = pattern
@@ -57,10 +58,8 @@ process.stdin.on('end', () => {
   if (symbolTokens.length === 0) process.exit(0);
 
   const suggestions = symbolTokens.map(sym => {
-    const isPascal = /^[A-Z]/.test(sym);
-    return isPascal
-      ? `  mcp__cclsp__find_workspace_symbols("${sym}")  → locate in project\n  mcp__cclsp__find_definition("${sym}")          → go to definition`
-      : `  mcp__cclsp__find_references("${sym}")          → all usages\n  mcp__cclsp__find_definition("${sym}")          → go to definition`;
+    const intent = /^[A-Z]/.test(sym) ? 'symbol_search' : 'references';
+    return `  ${sym}:\n${buildSuggestion(sym, intent, '    ')}`;
   }).join('\n');
 
   const msg =
@@ -82,8 +81,14 @@ process.stdin.on('end', () => {
   }));
 });
 
-function isCodeSymbol(s) {
-  if (!s || s.length < 4) return false;
+// Zero-width / formatting chars that would split tokens invisibly and
+// bypass ASCII regex checks. Strip them before any symbol detection.
+const ZERO_WIDTH = /[\u00AD\u200B-\u200F\u2060-\u2064\uFEFF]/g;
+
+function isCodeSymbol(raw) {
+  if (!raw) return false;
+  const s = String(raw).replace(ZERO_WIDTH, '');
+  if (s.length < 4) return false;
   if (/\s/.test(s)) return false;
 
   // File extensions and directory/framework keywords — always allowed

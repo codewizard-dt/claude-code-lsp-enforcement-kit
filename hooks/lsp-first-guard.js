@@ -2,7 +2,9 @@
 'use strict';
 
 // lsp-first-guard.js — PreToolUse hook (matcher: Grep)
-// Blocks Grep on code symbols. Suggests LSP equivalent.
+// Blocks Grep on code symbols. Suggests LSP equivalent for the active provider.
+
+const { buildSuggestion } = require('./lib/detect-lsp-provider');
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -14,9 +16,11 @@ process.stdin.on('end', () => {
   if (data.tool_name !== 'Grep') process.exit(0);
 
   const params  = data.tool_input || {};
-  const pattern = (params.pattern || '').trim();
-  const searchPath = params.path || '';
-  const glob    = params.glob || '';
+  // String coercion: non-string pattern (number, array, etc.) would throw on .trim()
+  // and fail-open — Claude Code treats crash as passthrough. See security review.
+  const pattern = String(params.pattern ?? '').trim();
+  const searchPath = String(params.path ?? '');
+  const glob    = String(params.glob ?? '');
 
   if (/knowledge-vault|\.task[\\/]|\.claude[\\/]|node_modules|logs?[\\/]|docs?[\\/]|supabase[\\/]migrations/i.test(searchPath)) {
     process.exit(0);
@@ -37,11 +41,8 @@ process.stdin.on('end', () => {
   if (symbolParts.length === 0) process.exit(0);
 
   const suggestions = symbolParts.map(sym => {
-    const isPascal = /^[A-Z]/.test(sym);
-    if (isPascal) {
-      return `  mcp__cclsp__find_workspace_symbols("${sym}")  → find in project\n  mcp__cclsp__find_definition("${sym}")          → go to definition`;
-    }
-    return `  mcp__cclsp__find_references("${sym}")          → all usages\n  mcp__cclsp__find_definition("${sym}")          → go to definition`;
+    const intent = /^[A-Z]/.test(sym) ? 'symbol_search' : 'references';
+    return `  ${sym}:\n${buildSuggestion(sym, intent, '    ')}`;
   }).join('\n');
 
   process.stderr.write(
