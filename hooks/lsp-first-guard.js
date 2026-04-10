@@ -4,7 +4,7 @@
 // lsp-first-guard.js — PreToolUse hook (matcher: Grep)
 // Blocks Grep on code symbols. Suggests LSP equivalent for the active provider.
 
-const { buildSuggestion } = require('./lib/detect-lsp-provider');
+const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/detect-lsp-provider');
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -50,10 +50,15 @@ process.stdin.on('end', () => {
     `Symbols: ${symbolParts.join(', ')}\nLSP tools:\n${suggestions}\n\n`
   );
 
-  console.log(JSON.stringify({
-    decision: 'block',
-    reason: `LSP-FIRST: Pattern contains code symbol(s) [${symbolParts.join(', ')}]. Use LSP tools:\n${suggestions}`
-  }));
+  // Emit structured JSON for programmatic consumers (monitoring, dashboards, IDE plugins).
+  // `decision` and `reason` fields remain backward compatible.
+  const intent = /^[A-Z]/.test(symbolParts[0]) ? 'symbol_search' : 'references';
+  console.log(JSON.stringify(buildStructuredBlockResponse({
+    hook: 'lsp-first-guard',
+    symbols: symbolParts,
+    intent,
+    reason: `LSP-FIRST: Pattern contains code symbol(s) [${symbolParts.join(', ')}]. Use LSP tools:\n${suggestions}`,
+  })));
 });
 
 function isCodeSymbol(s) {

@@ -25,7 +25,7 @@
  *   by extension or concept, not for symbol-based search.
  */
 
-const { buildSuggestion } = require('./lib/detect-lsp-provider');
+const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/detect-lsp-provider');
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -75,10 +75,13 @@ process.stdin.on('end', () => {
 
   process.stderr.write(msg);
 
-  console.log(JSON.stringify({
-    decision: 'block',
+  const intent = /^[A-Z]/.test(symbolTokens[0]) ? 'symbol_search' : 'references';
+  console.log(JSON.stringify(buildStructuredBlockResponse({
+    hook: 'lsp-first-glob-guard',
+    symbols: symbolTokens,
+    intent,
     reason: `LSP-FIRST: Glob pattern contains code symbol(s) [${symbolTokens.join(', ')}]. Use LSP tools instead of filename-based symbol search.`,
-  }));
+  })));
 });
 
 // Zero-width / formatting chars that would split tokens invisibly and

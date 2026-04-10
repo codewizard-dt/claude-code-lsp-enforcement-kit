@@ -33,8 +33,11 @@ process.stdin.on('end', () => {
   const isForcedExplorer = FORCE_LSP_CONTEXT_AGENTS.includes(subagentType);
 
   if (!isForcedExplorer) {
-    if (EXEMPT_AGENTS.includes(subagentType)) process.exit(0);
-    if (EXEMPT_AGENTS.some(e => subagentType.toLowerCase().includes(e))) process.exit(0);
+    // Exact match only — previously `.includes(e)` allowed substring matches
+    // like `exploit-deep-security-reviewer` to bypass by containing a
+    // legitimate exempt name. Both checks now case-insensitive exact.
+    const subType = subagentType.toLowerCase();
+    if (EXEMPT_AGENTS.some(e => e.toLowerCase() === subType)) process.exit(0);
   }
 
   if (prompt.length < 200) process.exit(0);
@@ -99,6 +102,10 @@ process.stdin.on('end', () => {
   const decision = (isForcedExplorer || isolation === 'worktree') ? 'block' : 'warn';
   console.log(JSON.stringify({
     decision,
-    reason: `LSP PRE-DELEGATION: ${agentLabel} without "## LSP CONTEXT". Use LSP MCP tools first.`
+    reason: `LSP PRE-DELEGATION: ${agentLabel} without "## LSP CONTEXT". Use LSP MCP tools first.`,
+    hook: 'lsp-pre-delegation',
+    agentType: subagentType,
+    isForcedExplorer,
+    isolation,
   }));
 });

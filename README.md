@@ -343,10 +343,19 @@ The install script:
 
 ### Option 2: Run the script yourself
 
+**macOS / Linux:**
 ```bash
 git clone https://github.com/nesaminua/claude-code-lsp-enforcement-kit.git
 cd claude-code-lsp-enforcement-kit
 bash install.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/nesaminua/claude-code-lsp-enforcement-kit.git
+cd claude-code-lsp-enforcement-kit
+pwsh ./install.ps1
+# or: powershell -ExecutionPolicy Bypass -File ./install.ps1
 ```
 
 Output:
@@ -447,13 +456,40 @@ Add to `SessionStart` array (create it if missing):
 
 ### Verify
 
-Restart Claude Code, then ask:
+Run the health-check script:
+
+```bash
+bash scripts/lsp-status.sh
+# or from anywhere after install:
+bash ~/.claude/scripts/lsp-status.sh
+```
+
+Expected output:
 
 ```
-Where is handleSubmit defined?
+LSP Enforcement Kit — Status
+============================
+
+  Hook files:          ✓ 7/7
+  Shared lib/helper:   ✓ yes
+  Settings registered: ✓ PreToolUse(5) PostToolUse(1) SessionStart(1)
+  Detected providers:  ✓ cclsp
+
+State for current cwd (/path/to/project)
+------------------------
+  Warmup done:         yes
+  nav_count:           5 (LSP navigation calls)
+  read_count:          7 (unique code files read)
+  Last tool:           mcp__cclsp__find_references (2min ago)
+
+  ✓ Surgical mode active — all Reads unlimited for this session.
+
+Diagnostic summary
+------------------
+  All checks passed. Enforcement is active.
 ```
 
-Expected: Claude uses `find_definition`, NOT Grep. If it tries Grep, you'll see the block message.
+Or restart Claude Code and ask "Where is handleSubmit defined?" — Claude should use `find_definition`, not Grep.
 
 ## LSP Tool Reference
 

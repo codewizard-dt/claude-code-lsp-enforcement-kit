@@ -6,7 +6,7 @@
 // Suggests LSP equivalent for the active provider (cclsp / Serena / ...).
 // Allows: git grep, non-code paths, non-code file types.
 
-const { buildSuggestion } = require('./lib/detect-lsp-provider');
+const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/detect-lsp-provider');
 
 // Zero-width / formatting chars that would split tokens invisibly and
 // bypass ASCII regex symbol detection.
@@ -40,9 +40,12 @@ process.stdin.on('end', () => {
   const fullPattern = patternMatch[1];
   // Strip zero-width chars from the matched pattern (already stripped from cmd,
   // but an explicit safety for pattern extraction edge cases).
+  // NOTE: split on BOTH `|` and `.` — previously we stripped dots, which merged
+  // dotted expressions like `mcp.Tool` into `mcpTool` (camelCase false positive).
+  // Now we split on dots so each side is evaluated independently.
   const parts = fullPattern
-    .split(/\\?\|/)
-    .map(p => p.replace(ZERO_WIDTH, '').replace(/[.*+?^${}()[\]\\]/g, '').trim())
+    .split(/\\?\||\./)
+    .map(p => p.replace(ZERO_WIDTH, '').replace(/[*+?^${}()[\]\\]/g, '').trim())
     .filter(Boolean);
   const symbols = parts.filter(p => {
     if (p.length < 4 || /\s/.test(p)) return false;
@@ -53,9 +56,10 @@ process.stdin.on('end', () => {
     ];
     if (skip.some(rx => rx.test(p))) return false;
 
+    // NOTE: dotted-symbol regex removed — after splitting on `.` above,
+    // no `p` can contain a dot, so the path was dead code.
     return (/^[a-z][a-zA-Z0-9]{3,}$/.test(p) && /[A-Z]/.test(p)) ||
            /^[A-Z][a-zA-Z][a-zA-Z0-9]{2,}$/.test(p) ||
-           /^[a-z][a-zA-Z]*\.[a-z][a-zA-Z]*$/i.test(p) ||
            (/^[a-z]+(_[a-z]+){2,}$/.test(p) && p.length >= 9);
   });
 
@@ -109,8 +113,11 @@ process.stdin.on('end', () => {
     `LSP is always connected. Use:\n${suggestions}\n\n`
   );
 
-  console.log(JSON.stringify({
-    decision: 'block',
-    reason: `LSP-FIRST: Pattern contains code symbols [${symbols.join(', ')}]. Use LSP:\n${suggestions}`
-  }));
+  const intent = /^[A-Z]/.test(symbols[0]) ? 'symbol_search' : 'references';
+  console.log(JSON.stringify(buildStructuredBlockResponse({
+    hook: 'bash-grep-block',
+    symbols,
+    intent,
+    reason: `LSP-FIRST: Pattern contains code symbols [${symbols.join(', ')}]. Use LSP:\n${suggestions}`,
+  })));
 });

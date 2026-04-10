@@ -215,6 +215,14 @@ function getTrackerToolNameRegex() {
     .join('|');
 }
 
+// Pre-compile plugin-wrapped regexes once at module load (perf: avoid
+// new RegExp() on every tool call). Keyed by provider matchToken.
+const PLUGIN_WRAPPED_RE = new Map();
+for (const key of Object.keys(PROVIDERS)) {
+  const token = PROVIDERS[key].matchToken;
+  PLUGIN_WRAPPED_RE.set(token, new RegExp(`^mcp__plugin_[^_]+_${token}__`));
+}
+
 /**
  * Check whether a tool_name string belongs to any known LSP provider.
  * Handles both standalone and plugin-wrapped MCP server naming:
@@ -230,11 +238,76 @@ function isLspProviderTool(toolName) {
     const token = PROVIDERS[key].matchToken;
     // Standalone form: mcp__<token>__
     if (toolName.startsWith(`mcp__${token}__`)) return true;
-    // Plugin-wrapped form: mcp__plugin_<plugin>_<token>__
-    const pluginRegex = new RegExp(`^mcp__plugin_[^_]+_${token}__`);
-    if (pluginRegex.test(toolName)) return true;
+    // Plugin-wrapped form: mcp__plugin_<plugin>_<token>__  (cached regex)
+    const pluginRegex = PLUGIN_WRAPPED_RE.get(token);
+    if (pluginRegex && pluginRegex.test(toolName)) return true;
   }
   return false;
+}
+
+/**
+ * Build a structured list of suggestion objects for programmatic consumers
+ * (monitoring, dashboards, IDE plugins). Shape:
+ *   [{ provider, label, tool, args, displayTool }]
+ *
+ * Consumers can render any field or invoke the tool directly from the
+ * structured data without parsing human-readable strings.
+ */
+function buildStructuredSuggestions(symbol, intent) {
+  const providers = detectProviders();
+  const out = [];
+  // Escape embedded quotes so `displayTool` remains a well-formed single
+  // call-expression string even if the symbol contains a literal quote.
+  // Consumers that invoke programmatically should use `tool` + `args`;
+  // `displayTool` is explicitly for human rendering.
+  const safeSym = String(symbol).replace(/"/g, '\\"');
+  for (const key of providers) {
+    const prov = PROVIDERS[key];
+    if (!prov) continue;
+    const toolName = prov.tools[intent] || prov.tools.symbol_search;
+    if (!toolName) continue;
+    out.push({
+      provider:    key,
+      label:       prov.label,
+      tool:        `${prov.prefix}${toolName}`,
+      args:        { query: String(symbol) },
+      displayTool: `${prov.prefix}${toolName}("${safeSym}")`,
+    });
+  }
+  return out;
+}
+
+/**
+ * Assemble a structured block response that blocking hooks can emit via
+ * console.log(JSON.stringify(...)). Keeps `decision` and `reason` fields
+ * intact (backward compatible with existing consumers) while adding rich
+ * metadata: `hook`, `symbols`, `intent`, `providers`, `suggestions[]`.
+ *
+ * @param {object} params
+ * @param {string} params.hook       hook filename identifier (e.g. 'lsp-first-guard')
+ * @param {string[]} params.symbols  detected code symbols from user input
+ * @param {string} params.intent     navigation intent for suggestions
+ * @param {string} params.reason     human-readable reason (goes into `reason` field)
+ * @returns {object} JSON-serialisable block response
+ */
+function buildStructuredBlockResponse({ hook, symbols, intent, reason }) {
+  const providers = detectProviders();
+  const suggestions = [];
+  const symbolList = Array.isArray(symbols) ? symbols : [];
+  for (const sym of symbolList) {
+    for (const s of buildStructuredSuggestions(sym, intent)) {
+      suggestions.push({ symbol: String(sym), ...s });
+    }
+  }
+  return {
+    decision: 'block',
+    reason:   String(reason ?? ''),
+    hook:     String(hook ?? ''),
+    symbols:  symbolList.map(String),
+    intent:   String(intent ?? ''),
+    providers,
+    suggestions,
+  };
 }
 
 module.exports = {
@@ -244,4 +317,6 @@ module.exports = {
   buildWarmupInstructions,
   getTrackerToolNameRegex,
   isLspProviderTool,
+  buildStructuredSuggestions,
+  buildStructuredBlockResponse,
 };
