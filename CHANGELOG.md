@@ -4,6 +4,11 @@ All notable changes to the LSP Enforcement Kit. Format based on [Keep a Changelo
 
 ## [Unreleased]
 
+## [2.3.2] — 2026-04-14
+
+### Added
+- **Hero image** `assets/token-savings.png` (1000×988, ~50 KB, 64-color palette) showing the 5-operation savings table and weekly totals at a glance. Placed in the README under the badge row, above the "In Action" code examples. Docs-only release — no code changes.
+
 ## [2.3.1] — 2026-04-14
 
 ### Changed

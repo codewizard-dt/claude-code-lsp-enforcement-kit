@@ -22,6 +22,10 @@
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+<p align="center">
+  <img src="assets/token-savings.png" alt="LSP vs Grep token savings — 73% per week" width="720">
+</p>
+
 ---
 
 ## In Action
