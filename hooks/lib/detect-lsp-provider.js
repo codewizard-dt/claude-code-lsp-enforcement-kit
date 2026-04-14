@@ -203,6 +203,34 @@ function buildWarmupInstructions(indent = '  ') {
 }
 
 /**
+ * Build a copy-pasteable warmup call parametrized by the actual file the
+ * agent is about to read. File-parametrized calls work in any project
+ * without guessing symbol names from filenames — the file path is given
+ * by the hook input, and each provider's warmup tool accepts a file arg:
+ *   cclsp  → get_diagnostics("<path>")       primes the TS project
+ *   serena → get_symbols_overview("<path>")  returns the file's top-level symbols
+ *
+ * Both calls also count as nav calls for the gate counters, so this
+ * simultaneously unblocks Gate 1 and contributes to Gates 4/5.
+ *
+ * Returns a multi-line string (one line per active provider) or '' if
+ * no providers are detected or filePath is empty.
+ */
+function buildFileWarmupCall(filePath, indent = '  ') {
+  if (!filePath) return '';
+  const providers = detectProviders();
+  if (providers.length === 0) return '';
+  const safeFile = String(filePath).replace(/"/g, '\\"');
+  const lines = [];
+  for (const key of providers) {
+    const prov = PROVIDERS[key];
+    if (!prov?.warmup) continue;
+    lines.push(`${indent}${prov.prefix}${prov.warmup.tool}("${safeFile}")  (${prov.label})`);
+  }
+  return lines.join('\n');
+}
+
+/**
  * Returns a regex fragment that matches tool_name strings for all known
  * providers (used in PostToolUse matcher generation). Matches both
  * standalone and plugin-wrapped forms.
@@ -315,6 +343,7 @@ module.exports = {
   detectProviders,
   buildSuggestion,
   buildWarmupInstructions,
+  buildFileWarmupCall,
   getTrackerToolNameRegex,
   isLspProviderTool,
   buildStructuredSuggestions,

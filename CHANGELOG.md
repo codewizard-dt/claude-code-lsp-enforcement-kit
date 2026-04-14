@@ -4,6 +4,17 @@ All notable changes to the LSP Enforcement Kit. Format based on [Keep a Changelo
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-04-14
+
+### Added
+- **File-parametrized warmup calls** in `hooks/lib/detect-lsp-provider.js`. New exported helper `buildFileWarmupCall(filePath)` generates a copy-pasteable, multi-provider warmup call parametrized by the **actual file the agent is about to Read** — not a guessed symbol name from the filename. Works in any project regardless of export conventions. cclsp → `get_diagnostics("<path>")`, Serena → `get_symbols_overview("<path>")`. Both calls double as nav calls for gate counters, simultaneously unblocking Gate 1 and contributing to Gates 4/5.
+- **Concrete LSP commands in block messages** (`hooks/lsp-first-read-guard.js`). When a Read is blocked, the error message now includes the exact command to unblock it — parametrized by the blocked file path, not generic advice. Reduces friction from "which symbol should I search for?" to "run this exact command".
+- **Actionable 3-step remediation** in `hooks/lsp-pre-delegation.js`. Block reason is now a numbered, copy-pasteable guide: (1) prime LSP, (2) find symbols, (3) add `## LSP CONTEXT` block to agent prompt. Replaces the prior short message + stderr preview.
+
+### Changed
+- `lsp-first-read-guard.js` Gate 3 threshold constant `REQUIRE_NAV_1_AT` removed — inlined into gate logic for clarity.
+- Block-message formatting tightened to reduce line noise while preserving structured JSON output from v2.2.
+
 ## [2.2.0] — 2026-04-11
 
 ### Added

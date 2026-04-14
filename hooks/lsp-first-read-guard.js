@@ -5,7 +5,19 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { buildWarmupInstructions } = require('./lib/detect-lsp-provider');
+const { buildWarmupInstructions, buildFileWarmupCall } = require('./lib/detect-lsp-provider');
+
+/**
+ * Build a copy-pasteable warmup call parametrized by the exact file the
+ * agent is about to Read. This is project-agnostic: it uses the file path
+ * from the hook input instead of guessing a symbol name from the filename,
+ * so it works in any project regardless of export conventions.
+ */
+function buildConcreteCall(filePath) {
+  const call = buildFileWarmupCall(filePath, '  ');
+  if (!call) return '';
+  return `\nCONCRETE CALL FOR THIS FILE (works in any project):\n${call}\n`;
+}
 
 const STATE_DIR = path.join(os.homedir(), '.claude', 'state');
 const CODE_EXTENSIONS = /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|swift|vue|svelte|cpp|c|h|hpp)$/i;
@@ -17,7 +29,6 @@ const ALLOW_TEST_PATTERNS = /\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|py)$/i;
 const FLAG_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const FREE_READS = 2;
 const WARN_AT = 3;
-const REQUIRE_NAV_1_AT = 4;
 const REQUIRE_NAV_2_AT = 6;
 
 function getFlagPath() {
@@ -69,12 +80,14 @@ process.stdin.on('end', () => {
 
   if (!flag || !flag.warmup_done) {
     const warmupLines = buildWarmupInstructions('  ').join('\n');
+    const concrete = buildConcreteCall(filePath);
     emitBlock(
       `⛔ LSP-FIRST BLOCK (Gate 1 — Warmup Required)\n\n` +
       `Read on code file requires prior LSP warmup.\n\n` +
       `WARMUP PROTOCOL — call one of these first:\n` +
-      `${warmupLines}\n\n` +
-      `After warmup: ${FREE_READS} free Reads, then need LSP navigation.\n\n` +
+      `${warmupLines}\n` +
+      concrete +
+      `\nAfter warmup: ${FREE_READS} free Reads, then need LSP navigation.\n\n` +
       `Blocked: ${filePath}\n`
     );
   }
@@ -123,8 +136,9 @@ process.stdin.on('end', () => {
     emitBlock(
       `⛔ LSP-FIRST BLOCK (Gate 4 — LSP Navigation Required)\n\n` +
       `Read #${nextReadNum} requires at least 1 LSP navigation call.\n` +
-      `After 1 nav call, Reads 4-5 unlock. After 2, unlimited.\n\n` +
-      `Blocked: ${filePath}\n`
+      `After 1 nav call, Reads 4-5 unlock. After 2, unlimited.\n` +
+      buildConcreteCall(filePath) +
+      `\nBlocked: ${filePath}\n`
     );
   }
 
@@ -132,8 +146,9 @@ process.stdin.on('end', () => {
     emitBlock(
       `⛔ LSP-FIRST BLOCK (Gate 5 — Surgical Mode Required)\n\n` +
       `Read #${nextReadNum} requires at least 2 LSP navigation calls.\n` +
-      `Current: ${navCount} nav calls. Need 2.\n\n` +
-      `Blocked: ${filePath}\n`
+      `Current: ${navCount} nav calls. Need 2.\n` +
+      buildConcreteCall(filePath) +
+      `\nBlocked: ${filePath}\n`
     );
   }
 

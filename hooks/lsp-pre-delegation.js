@@ -93,19 +93,21 @@ process.stdin.on('end', () => {
   if (hasLspContext) process.exit(0);
 
   const agentLabel = isForcedExplorer ? `explorer "${subagentType}"` : 'implement agent';
-  process.stderr.write(
-    `\n⛔ LSP PRE-DELEGATION BLOCK: ${agentLabel} launched WITHOUT LSP CONTEXT\n` +
-    `Subagents have NO LSP/MCP access. Resolve symbols first (via cclsp, Serena,\n` +
-    `or any LSP MCP tools available), then add "## LSP CONTEXT" to the agent prompt.\n\n`
-  );
 
   const decision = (isForcedExplorer || isolation === 'worktree') ? 'block' : 'warn';
   console.log(JSON.stringify({
     decision,
-    reason: `LSP PRE-DELEGATION: ${agentLabel} without "## LSP CONTEXT". Use LSP MCP tools first.`,
-    hook: 'lsp-pre-delegation',
-    agentType: subagentType,
-    isForcedExplorer,
-    isolation,
+    reason: [
+      `LSP PRE-DELEGATION: ${agentLabel} without "## LSP CONTEXT".`,
+      '',
+      'DO THIS NOW (3 steps, then retry the Agent call):',
+      '1. mcp__cclsp__get_diagnostics("<any .ts file>")  — primes LSP',
+      '2. mcp__cclsp__find_workspace_symbols("<keyword from task>")  — finds symbols',
+      '3. Add to EVERY agent prompt:',
+      '   ## LSP CONTEXT (pre-resolved — do NOT re-search)',
+      '   - symbolName: defined at file.ts:42, called from a.ts:15',
+      '',
+      'Then re-launch the same Agent calls with ## LSP CONTEXT included.',
+    ].join('\n'),
   }));
 });
