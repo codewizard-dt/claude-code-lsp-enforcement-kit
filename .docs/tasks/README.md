@@ -4,9 +4,9 @@ Index of active and completed tasks. See `.docs/guides/task-lifecycle.md` for ho
 
 ## Active Tasks
 
-- [001 — Refactor hooks to Serena-only](active/001-serena-only-hooks.md)
-- [002 — Populate `serena-tool-map.yaml`](active/002-serena-tool-map.md)
+_None._
 
 ## Completed Tasks
 
-_None yet._
+- [001 — Refactor hooks to Serena-only](completed/001-serena-only-hooks.md)
+- [002 — Populate `serena-tool-map.yaml`](completed/002-serena-tool-map.md)

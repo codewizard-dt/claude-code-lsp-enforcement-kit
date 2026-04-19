@@ -1,0 +1,416 @@
+# Serena tool map — which Serena MCP tools replace which Claude Code built-ins,
+# and which hook in this kit enforces the substitution.
+#
+# Source of truth for the Serena tool catalog:
+#   https://oraios.github.io/serena/01-about/035_tools.html
+# Companion Serena memory: tech/serena_tools_reference
+
+metadata:
+  version: 1
+  last_updated: 2026-04-18
+  serena_source: https://oraios.github.io/serena/01-about/035_tools.html
+
+hooks:
+  serena-first-guard.js: "PreToolUse — blocks Grep on code symbols, suggests find_symbol / find_referencing_symbols"
+  serena-first-read-guard.js: "PreToolUse — blocks Read on code files until Serena warmup/nav gates satisfied, suggests get_symbols_overview + find_symbol"
+  serena-first-glob-guard.js: "PreToolUse — blocks Glob on code symbols, suggests find_symbol / find_referencing_symbols"
+  serena-bash-grep-block.js: "PreToolUse — blocks Bash grep/rg/ag/find/ls/cat/sed/awk on code symbols, suggests Serena file/symbol tools"
+  serena-pre-delegation.js: "PreToolUse — warns/blocks Agent calls without LSP context in implement phase, suggests get_symbols_overview + find_symbol"
+  serena-session-reset.js: "SessionStart — clears stale Serena navigation state at session start (no per-tool enforcement)"
+  serena-usage-tracker.js: "PostToolUse — tracks mcp__serena__* usage to unlock Read gates (observability, not enforcement)"
+
+tools:
+
+  # ── Symbol tools ──────────────────────────────────────────────────────────
+
+  - tool: find_symbol
+    category: symbol
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Grep
+        use_case: searching for function/class/method definitions by name
+      - tool: Bash
+        use_case: grep/rg/ag invocations that look up symbol definitions
+    enforcing_hook: serena-first-guard.js
+    notes: Prefer name-path patterns (Class/method, /absolute/path) over substring search.
+
+  - tool: find_referencing_symbols
+    category: symbol
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Grep
+        use_case: finding all call sites / usages of a function or class
+      - tool: Bash
+        use_case: grep/rg invocations that find references by symbol name
+    enforcing_hook: serena-first-guard.js
+    notes: Returns code snippets around each reference plus symbolic context.
+
+  - tool: get_symbols_overview
+    category: symbol
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Read
+        use_case: reading an entire file just to understand its top-level structure
+      - tool: Grep
+        use_case: grepping for class/function names to get a file map
+    enforcing_hook: serena-first-read-guard.js
+    notes: Should be the first tool called on any unfamiliar file; returns symbol tree without reading full source.
+
+  - tool: insert_after_symbol
+    category: symbol
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Edit
+        use_case: inserting new code after a known function or class
+      - tool: Bash
+        use_case: sed/awk insertions after a line pattern
+    enforcing_hook: null
+    notes: Use to append new code at the end of a file by targeting the last top-level symbol.
+
+  - tool: insert_before_symbol
+    category: symbol
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Edit
+        use_case: inserting new code before a known function or class
+      - tool: Bash
+        use_case: sed/awk insertions before a line pattern
+    enforcing_hook: null
+    notes: Use to prepend imports or declarations before the first symbol in a file.
+
+  - tool: rename_symbol
+    category: symbol
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: LSP-backed rename — updates all references automatically. No Claude built-in equivalent; never use find-and-replace manually for renames.
+
+  - tool: replace_symbol_body
+    category: symbol
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Edit
+        use_case: replacing the full body of a function, method, or class
+    enforcing_hook: null
+    notes: Requires the symbol body to have been previously retrieved via find_symbol. Do not use without first reading the symbol.
+
+  - tool: restart_language_server
+    category: symbol
+    serena_status: optional
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Recovery tool when the LSP becomes unresponsive; not part of normal navigation flow.
+
+  - tool: safe_delete_symbol
+    category: symbol
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Edit
+        use_case: deleting a function or class and all its references
+    enforcing_hook: null
+    notes: Checks for references before deleting; safer than a manual Edit delete.
+
+  # ── File tools ────────────────────────────────────────────────────────────
+
+  - tool: read_file
+    category: file
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Read
+        use_case: reading source code files for understanding or editing
+    enforcing_hook: serena-first-read-guard.js
+    notes: >
+      Preferred over native Read for code files. Exception: native Read is still
+      correct for markdown and config files (JSON, YAML, .env) per
+      .docs/guides/mcp-tools.md — Serena's read_file is for source code only.
+
+  - tool: create_text_file
+    category: file
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Write
+        use_case: creating new source code files
+    enforcing_hook: null
+    notes: No hook blocks Write; substitution is policy-only per .docs/guides/mcp-tools.md.
+
+  - tool: list_dir
+    category: file
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Bash
+        use_case: "ls, find -type d, find -type f directory listings"
+      - tool: Glob
+        use_case: listing files in a directory by pattern
+    enforcing_hook: serena-bash-grep-block.js
+    notes: Use for all directory listings; Glob is additionally guarded by serena-first-glob-guard.js.
+
+  - tool: find_file
+    category: file
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Glob
+        use_case: finding files by name pattern across the codebase
+      - tool: Bash
+        use_case: "find -name, find -path invocations"
+    enforcing_hook: serena-first-glob-guard.js
+    notes: Also covered by serena-bash-grep-block.js when the anti-pattern is a Bash find command.
+
+  - tool: search_for_pattern
+    category: file
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Grep
+        use_case: searching file contents by regex pattern
+      - tool: Bash
+        use_case: "grep, rg, ag, ack invocations on code files"
+    enforcing_hook: serena-bash-grep-block.js
+    notes: >
+      Also falls under serena-first-guard.js when the pattern matches a code symbol.
+      Fallback for cases where find_symbol returns empty (e.g. comments, strings, config values).
+
+  - tool: replace_content
+    category: file
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Edit
+        use_case: replacing specific text in a source code file
+      - tool: Bash
+        use_case: "sed -i, awk in-place edits on code files"
+    enforcing_hook: null
+    notes: >
+      Policy-only substitution per .docs/guides/mcp-tools.md; no hook blocks Edit.
+      Addresses the anti-pattern of using sed to flip task-file checkboxes — for markdown
+      task files use native Edit; for code files use replace_content (literal) or
+      replace_symbol_body (whole symbol).
+
+  - tool: replace_lines
+    category: file
+    serena_status: optional
+    claude_tools_replaced:
+      - tool: Bash
+        use_case: sed -i line-range replacements
+    enforcing_hook: null
+    notes: Use when you need to replace a precise line range without a symbolic anchor.
+
+  - tool: insert_at_line
+    category: file
+    serena_status: optional
+    claude_tools_replaced:
+      - tool: Bash
+        use_case: "sed line insertions, echo >> appends at specific lines"
+    enforcing_hook: null
+    notes: Prefer insert_after_symbol / insert_before_symbol when a symbolic anchor is available.
+
+  - tool: delete_lines
+    category: file
+    serena_status: optional
+    claude_tools_replaced:
+      - tool: Bash
+        use_case: sed line deletions on code files
+    enforcing_hook: null
+    notes: Use only when a symbolic delete (safe_delete_symbol) is not applicable.
+
+  # ── Memory tools ──────────────────────────────────────────────────────────
+
+  - tool: list_memories
+    category: memory
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Lists all memories; filter with the topic parameter for large memory sets.
+
+  - tool: read_memory
+    category: memory
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Read a memory by name; use after list_memories to rebuild context at session start.
+
+  - tool: write_memory
+    category: memory
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Create a new memory; use for architecture decisions, gotchas, naming conventions, integration patterns.
+
+  - tool: edit_memory
+    category: memory
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Patch an existing memory with literal or regex replacement; prefer over full rewrites.
+
+  - tool: rename_memory
+    category: memory
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Move a memory into a proper topic hierarchy (uses / separators, e.g. modules/frontend).
+
+  - tool: delete_memory
+    category: memory
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Delete a memory only when explicitly instructed or when it is provably stale and misleading.
+
+  # ── Workflow tools ────────────────────────────────────────────────────────
+
+  - tool: initial_instructions
+    category: workflow
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Returns the Serena instructions manual; call at session start before any other Serena tool.
+
+  - tool: check_onboarding_performed
+    category: workflow
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Call after activating a project to confirm onboarding was completed; gates subsequent workflow.
+
+  - tool: onboarding
+    category: workflow
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Runs the interactive project onboarding flow; only needed once per project.
+
+  # ── Config tools ──────────────────────────────────────────────────────────
+
+  - tool: activate_project
+    category: config
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: >
+      Activates a Serena project by path; not available in this Claude Code session
+      (project activation is handled externally). Listed for catalog completeness.
+
+  - tool: get_current_config
+    category: config
+    serena_status: enabled
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: >
+      Returns current Serena configuration; not available in this Claude Code session.
+      Listed for catalog completeness.
+
+  - tool: open_dashboard
+    category: config
+    serena_status: optional
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Opens the Serena web dashboard in the default browser; interactive use only.
+
+  - tool: remove_project
+    category: config
+    serena_status: optional
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Removes a project from Serena's project list; destructive — use with caution.
+
+  # ── Shell tools ───────────────────────────────────────────────────────────
+
+  - tool: execute_shell_command
+    category: shell
+    serena_status: enabled
+    claude_tools_replaced:
+      - tool: Bash
+        use_case: running arbitrary shell commands
+    enforcing_hook: null
+    notes: >
+      This kit uses native Claude Bash rather than Serena's execute_shell_command;
+      Serena's shell tool is equivalent but routed through the LSP server.
+      No hook enforces the substitution — prefer native Bash for shell work in this project.
+
+  # ── Query-project tools ───────────────────────────────────────────────────
+
+  - tool: list_queryable_projects
+    category: query
+    serena_status: optional
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: Lists projects available for cross-project RAG queries via query_project.
+
+  - tool: query_project
+    category: query
+    serena_status: optional
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: >
+      Cross-project semantic search; useful when you need to find patterns or
+      examples from other Serena-indexed repositories.
+
+  # ── JetBrains tools (IDE-only) ────────────────────────────────────────────
+
+  - tool: jet_brains_find_symbol
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_find_declaration
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_find_implementations
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_find_referencing_symbols
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_get_symbols_overview
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_rename
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_move
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_inline_symbol
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_safe_delete
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."
+
+  - tool: jet_brains_type_hierarchy
+    category: jetbrains
+    serena_status: jetbrains-only
+    claude_tools_replaced: []
+    enforcing_hook: null
+    notes: "Alternative backend when Serena is paired with a JetBrains IDE; not relevant in Claude Code."

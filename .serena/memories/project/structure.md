@@ -8,7 +8,7 @@ claude-code-lsp-enforcement-kit/
 ├── LICENSE                       # MIT
 ├── install.sh                    # Bash installer (macOS/Linux) — idempotent settings.json merge + old-file cleanup
 ├── install.ps1                   # PowerShell installer (Windows) — mirrors install.sh
-├── serena-tool-map.yaml          # Serena tool ↔ Claude-Code tool mapping (v3, being populated by task 002)
+├── serena-tool-map.yaml          # Serena tool ↔ Claude-Code tool mapping (v3, complete — 44 tools across 8 groups)
 │
 ├── hooks/                        # All hook JS — what gets copied to ~/.claude/hooks/
 │   ├── serena-first-guard.js        # #1 Grep blocker
@@ -36,15 +36,17 @@ claude-code-lsp-enforcement-kit/
 │   │   └── task-lifecycle.md     # How tasks flow: active/ → completed/, pending UAT/ → completed
 │   ├── tasks/
 │   │   ├── README.md             # Index of active/completed tasks
-│   │   ├── active/               # (in-flight tasks)
+│   │   ├── active/               # (empty — all tasks complete)
 │   │   ├── completed/
-│   │   │   └── 001-serena-only-hooks.md    # v3.0 refactor (UAT skipped)
+│   │   │   ├── 001-serena-only-hooks.md    # v3.0 refactor (UAT skipped)
+│   │   │   └── 002-serena-tool-map.md      # serena-tool-map.yaml population (UAT skipped)
 │   │   └── trashed/              # (empty)
 │   └── uat/
 │       ├── pending/
 │       ├── completed/
 │       ├── skipped/
-│       │   └── 001-serena-only-hooks.uat.md # skip skeleton for v3.0 refactor
+│       │   ├── 001-serena-only-hooks.uat.md # skip skeleton for v3.0 refactor
+│       │   └── 002-serena-tool-map.uat.md   # skip skeleton for tool map task
 │       ├── trashed/
 │       └── screenshots/
 │
