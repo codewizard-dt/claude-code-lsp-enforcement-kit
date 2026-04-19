@@ -6,7 +6,7 @@
 
 ## When changing a hook
 1. **Manual smoke test** via stdin: `echo '<json>' | node hooks/<hook>.js` — check decision and structured output.
-2. **Check all call sites of any shared lib function** (`hooks/lib/detect-lsp-provider.js`) — changes ripple to every hook that consumes it.
+2. **Check all call sites of any shared lib function** (`hooks/lib/serena.js`) — changes ripple to every hook that consumes it.
 3. **Re-run `bash install.sh`** locally if you touched hook filenames or added new matchers — installer registers the matchers list, so new hooks need installer changes.
 4. **Verify with `bash scripts/lsp-status.sh`** — confirms settings.json registration count matches hooks.
 5. **Update `CHANGELOG.md`** under `[Unreleased]` with `Added` / `Changed` / `Fixed` / `Security` subsection. Not optional — the changelog is the authoritative history.

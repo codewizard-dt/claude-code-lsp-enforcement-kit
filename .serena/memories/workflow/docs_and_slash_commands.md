@@ -18,7 +18,7 @@
     └── screenshots/  (transient)
 ```
 
-All `active/`, `completed/`, etc. directories currently contain only `.gitkeep` — the system is infrastructure, no real tasks yet.
+`tasks/completed/` holds the v3.0 refactor task (`001-serena-only-hooks.md`, UAT skipped via `/uat-skip`). The skeleton skip marker lives at `uat/skipped/001-serena-only-hooks.uat.md`. `tasks/active/` is currently empty.
 
 ## Task naming
 `<NNN>-<short-slug>.md` for tasks, `<NNN>-<short-slug>.uat.md` for matching UATs. NNN is zero-padded sequential, unique across `active/ + completed/`.

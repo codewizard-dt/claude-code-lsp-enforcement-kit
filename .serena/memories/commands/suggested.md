@@ -17,7 +17,7 @@ Prints: hook count (7/7), settings registration counts, detected providers, curr
 ## Manual unit test of a hook
 Each hook reads JSON on stdin. Quick smoke test:
 ```bash
-echo '{"tool_input":{"pattern":"handleSubmit"}}' | node hooks/lsp-first-guard.js
+echo '{"tool_input":{"pattern":"handleSubmit"}}' | node hooks/serena-first-guard.js
 # expect: exit 0 with JSON decision=block on stdout
 ```
 

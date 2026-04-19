@@ -2,22 +2,22 @@
 'use strict';
 
 /**
- * lsp-session-reset.js — SessionStart hook
+ * serena-session-reset.js — SessionStart hook
  *
- * Wipes stale LSP navigation state for the current cwd at session start.
+ * Wipes stale Serena navigation state for the current cwd at session start.
  *
  * Without this, `nav_count` persists for 24h across sessions (see
- * lsp-first-read-guard.js FLAG_EXPIRY_MS). A new session can inherit
+ * serena-first-read-guard.js FLAG_EXPIRY_MS). A new session can inherit
  * "surgical mode" (nav_count >= 2) from previous work and freely Read
- * code files without ever calling LSP — a full bypass of the LSP-first
- * enforcement chain.
+ * code files without ever calling Serena — a full bypass of the
+ * Serena-first enforcement chain.
  *
  * After reset:
- *   - Gate 1 (warmup): first code Read BLOCKED until mcp__cclsp__get_diagnostics
+ *   - Gate 1 (warmup): first code Read BLOCKED until mcp__serena__get_symbols_overview
  *   - Gate 4: read #4 BLOCKED unless nav_count >= 1
  *   - Gate 5: read #6 BLOCKED unless nav_count >= 2
  *
- * Side-effect: first session call forces one warmup (~1 LSP call). Cheap.
+ * Side-effect: first session call forces one warmup (~1 Serena call). Cheap.
  */
 
 const fs = require('fs');

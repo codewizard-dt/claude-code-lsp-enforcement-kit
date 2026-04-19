@@ -15,6 +15,7 @@ CLAUDE_DIR="$HOME/.claude"
 HOOKS_DIR="$CLAUDE_DIR/hooks"
 STATE_DIR="$CLAUDE_DIR/state"
 SETTINGS="$CLAUDE_DIR/settings.json"
+CLAUDE_JSON="$HOME/.claude.json"
 
 # Colors only if stdout is a tty
 if [ -t 1 ]; then
@@ -31,26 +32,27 @@ echo
 
 # 1. Hook files installed
 EXPECTED_HOOKS=(
-  bash-grep-block.js
-  lsp-first-guard.js
-  lsp-first-glob-guard.js
-  lsp-first-read-guard.js
-  lsp-pre-delegation.js
-  lsp-session-reset.js
-  lsp-usage-tracker.js
+  serena-bash-grep-block.js
+  serena-first-guard.js
+  serena-first-glob-guard.js
+  serena-first-read-guard.js
+  serena-pre-delegation.js
+  serena-session-reset.js
+  serena-usage-tracker.js
 )
 installed=0; missing=()
 for h in "${EXPECTED_HOOKS[@]}"; do
   if [ -f "$HOOKS_DIR/$h" ]; then installed=$((installed+1)); else missing+=("$h"); fi
 done
 helper_ok="no"
-if [ -f "$HOOKS_DIR/lib/detect-lsp-provider.js" ]; then helper_ok="yes"; fi
+if [ -f "$HOOKS_DIR/lib/serena.js" ]; then helper_ok="yes"; fi
 
 status="ok"; [ $installed -eq 7 ] || status="bad"
 printf '  Hook files:          %s %d/7 ' "$(check $status)" "$installed"
 [ ${#missing[@]} -gt 0 ] && printf '%s(missing: %s)%s' "$DIM" "${missing[*]}" "$NC"
 echo
-printf '  Shared lib/helper:   %s %s\n' "$(check $([ "$helper_ok" = "yes" ] && echo ok || echo bad))" "$helper_ok"
+printf '  Shared lib/helper:   %s %s %s(~/.claude/hooks/lib/serena.js)%s\n' \
+  "$(check $([ "$helper_ok" = "yes" ] && echo ok || echo bad))" "$helper_ok" "$DIM" "$NC"
 
 # 2. Settings.json registration
 if [ ! -f "$SETTINGS" ]; then
@@ -62,42 +64,62 @@ fi
 eval "$(node -e "
   const s = JSON.parse(require('fs').readFileSync('$SETTINGS','utf8'));
   const count = (arr, sub) => (arr || []).filter(e => (e.hooks || []).some(h => (h.command || '').includes(sub))).length;
+  const countMatcher = (arr, sub) => (arr || []).filter(e => (e.matcher || '').includes(sub)).length;
   const pre = s.hooks && s.hooks.PreToolUse || [];
   const post = s.hooks && s.hooks.PostToolUse || [];
   const start = s.hooks && s.hooks.SessionStart || [];
-  console.log('PRE_GREP=' + count(pre, 'lsp-first-guard.js'));
-  console.log('PRE_GLOB=' + count(pre, 'lsp-first-glob-guard.js'));
-  console.log('PRE_BASH=' + count(pre, 'bash-grep-block.js'));
-  console.log('PRE_READ=' + count(pre, 'lsp-first-read-guard.js'));
-  console.log('PRE_AGENT=' + count(pre, 'lsp-pre-delegation.js'));
-  console.log('POST_TRACKER=' + count(post, 'lsp-usage-tracker.js'));
-  console.log('SESSION_RESET=' + count(start, 'lsp-session-reset.js'));
-" 2>/dev/null || echo 'PRE_GREP=0 PRE_GLOB=0 PRE_BASH=0 PRE_READ=0 PRE_AGENT=0 POST_TRACKER=0 SESSION_RESET=0')"
+  console.log('PRE_GREP=' + count(pre, 'serena-first-guard.js'));
+  console.log('PRE_GLOB=' + count(pre, 'serena-first-glob-guard.js'));
+  console.log('PRE_BASH=' + count(pre, 'serena-bash-grep-block.js'));
+  console.log('PRE_READ=' + count(pre, 'serena-first-read-guard.js'));
+  console.log('PRE_AGENT=' + count(pre, 'serena-pre-delegation.js'));
+  console.log('POST_TRACKER=' + count(post, 'serena-usage-tracker.js'));
+  console.log('POST_MATCHER_OK=' + countMatcher(post, 'mcp__serena__'));
+  console.log('SESSION_RESET=' + count(start, 'serena-session-reset.js'));
+" 2>/dev/null || echo 'PRE_GREP=0 PRE_GLOB=0 PRE_BASH=0 PRE_READ=0 PRE_AGENT=0 POST_TRACKER=0 POST_MATCHER_OK=0 SESSION_RESET=0')"
 
 total_pre=$((PRE_GREP + PRE_GLOB + PRE_BASH + PRE_READ + PRE_AGENT))
 registered_all=0
 [ $PRE_GREP -ge 1 ] && [ $PRE_GLOB -ge 1 ] && [ $PRE_BASH -ge 1 ] && \
   [ $PRE_READ -ge 1 ] && [ $PRE_AGENT -ge 1 ] && \
-  [ $POST_TRACKER -ge 1 ] && [ $SESSION_RESET -ge 1 ] && registered_all=1
+  [ $POST_TRACKER -ge 1 ] && [ $POST_MATCHER_OK -ge 1 ] && [ $SESSION_RESET -ge 1 ] && registered_all=1
 
 printf '  Settings registered: %s PreToolUse(%d) PostToolUse(%d) SessionStart(%d)\n' \
   "$(check $([ $registered_all -eq 1 ] && echo ok || echo bad))" \
   "$total_pre" "$POST_TRACKER" "$SESSION_RESET"
+printf '  PostToolUse matcher: %s %s\n' \
+  "$(check $([ $POST_MATCHER_OK -ge 1 ] && echo ok || echo bad))" \
+  "$([ $POST_MATCHER_OK -ge 1 ] && echo 'mcp__serena__ matcher present' || echo 'mcp__serena__ matcher missing')"
 
-# 3. Detected LSP providers via the helper (if present)
-if [ -f "$HOOKS_DIR/lib/detect-lsp-provider.js" ]; then
-  providers=$(node -e "
+# 3. Detected providers — Serena only (scan ~/.claude.json mcpServers)
+provider_status="warn"
+provider_msg="(serena not found in ~/.claude.json mcpServers)"
+if [ -f "$CLAUDE_JSON" ]; then
+  serena_present=$(node -e "
     try {
-      const lib = require('$HOOKS_DIR/lib/detect-lsp-provider.js');
-      const p = lib.detectProviders();
-      console.log(p.length ? p.join(', ') : '(none detected)');
-    } catch (e) { console.log('(helper error)'); }
-  " 2>/dev/null)
-  provider_status="ok"; [ "$providers" = "(none detected)" ] && provider_status="warn"
-  icon=$(check $provider_status)
-  [ "$provider_status" = "warn" ] && icon="${YELLOW}!${NC}"
-  printf '  Detected providers:  %s %s\n' "$icon" "$providers"
+      const j = JSON.parse(require('fs').readFileSync('$CLAUDE_JSON','utf8'));
+      const seen = new Set();
+      const walk = (o) => {
+        if (!o || typeof o !== 'object') return;
+        if (o.mcpServers && typeof o.mcpServers === 'object') {
+          for (const k of Object.keys(o.mcpServers)) seen.add(k);
+        }
+        for (const k of Object.keys(o)) walk(o[k]);
+      };
+      walk(j);
+      console.log(seen.has('serena') ? 'yes' : 'no');
+    } catch (e) { console.log('err'); }
+  " 2>/dev/null || echo "err")
+  if [ "$serena_present" = "yes" ]; then
+    provider_status="ok"
+    provider_msg="serena"
+  elif [ "$serena_present" = "err" ]; then
+    provider_msg="(could not parse ~/.claude.json)"
+  fi
 fi
+icon=$(check $provider_status)
+[ "$provider_status" = "warn" ] && icon="${YELLOW}!${NC}"
+printf '  Detected providers:  %s %s\n' "$icon" "$provider_msg"
 
 # 4. Current cwd state file
 CWD_HASH=$(node -e "console.log(require('crypto').createHash('md5').update(process.cwd()).digest('hex').slice(0,12))" 2>/dev/null || echo "")

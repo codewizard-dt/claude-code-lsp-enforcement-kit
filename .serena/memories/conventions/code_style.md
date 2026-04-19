@@ -27,5 +27,5 @@
 - Tables preferred over bulleted lists for config/rule explanations.
 
 ## Naming
-- Hooks: `lsp-<role>.js` (kebab-case). Role suffix: `-guard`, `-block`, `-tracker`, `-reset`, `-pre-delegation`.
-- Provider tools referenced by their full MCP name: `mcp__cclsp__find_references`, `mcp__serena__find_symbol`.
+- Hooks: `serena-<role>.js` (kebab-case, v3.0). Role suffix: `-guard`, `-block`, `-tracker`, `-reset`, `-pre-delegation`.
+- Provider tools referenced by their full MCP name: `mcp__serena__find_symbol`, `mcp__serena__find_referencing_symbols`, `mcp__serena__get_symbols_overview` (Serena-only as of v3.0).

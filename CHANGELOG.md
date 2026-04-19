@@ -4,6 +4,26 @@ All notable changes to the LSP Enforcement Kit. Format based on [Keep a Changelo
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-04-18
+
+### Breaking changes
+- **Removed cclsp provider support.** The kit is now Serena-only. Block messages, warmup calls, and the PostToolUse tracker all reference `mcp__serena__*` tools exclusively.
+- **Renamed all hooks** from `lsp-*` to `serena-*`. The installer automatically unlinks old files at `~/.claude/hooks/lsp-*.js`; users who installed manually (via Option 3) must update their `settings.json` hook command paths.
+- **PostToolUse tracker matcher** changed from `mcp__cclsp__*` regex to `mcp__serena__*` regex. Re-run the installer or manually update the matcher.
+- **Removed automatic enablement** of the built-in `typescript-lsp@claude-plugins-official` plugin. It is no longer part of this kit.
+
+### Removed
+- `hooks/lib/detect-lsp-provider.js` → replaced by `hooks/lib/serena.js` (single-provider helper).
+- Multi-provider `PROVIDERS` registry and detection logic.
+- cclsp cold-start ("No Project") error heuristic in the usage tracker.
+
+### Migration
+Re-run `bash install.sh` (macOS/Linux) or `pwsh ./install.ps1` (Windows). The installer:
+1. Copies the 7 new `serena-*.js` hooks + `lib/serena.js`.
+2. Unlinks the 7 old `lsp-*.js` hooks + `lib/detect-lsp-provider.js`.
+3. Purges old hook entries from `settings.json` and inserts new ones.
+4. Removes the `typescript-lsp` plugin from `enabledPlugins`.
+
 ## [2.3.2] — 2026-04-14
 
 ### Added
@@ -84,7 +104,8 @@ Initial release.
 - `rules/lsp-first.md` — CLAUDE.md rule for LSP-first navigation.
 - `install.sh` — idempotent installer with `settings.json` merge.
 
-[Unreleased]: https://github.com/nesaminua/claude-code-lsp-enforcement-kit/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/nesaminua/claude-code-lsp-enforcement-kit/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/nesaminua/claude-code-lsp-enforcement-kit/compare/v2.3.2...v3.0.0
 [2.2.0]: https://github.com/nesaminua/claude-code-lsp-enforcement-kit/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/nesaminua/claude-code-lsp-enforcement-kit/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/nesaminua/claude-code-lsp-enforcement-kit/releases/tag/v2.0.0

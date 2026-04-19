@@ -2,21 +2,22 @@
 'use strict';
 
 /**
- * lsp-usage-tracker.js — PostToolUse hook
+ * serena-usage-tracker.js — PostToolUse hook
  *
- * Tracks successful LSP-provider calls in ~/.claude/state/lsp-ready-<hash>.
- * Sibling hook lsp-first-read-guard.js reads this state to make gate
+ * Tracks successful Serena calls in ~/.claude/state/lsp-ready-<hash>.
+ * Sibling hook serena-first-read-guard.js reads this state to make gate
  * decisions.
  *
- * Provider-aware: counts calls from any known LSP MCP server (cclsp,
- * Serena, ...) via ./lib/detect-lsp-provider.js — not hardcoded to cclsp.
+ * Recognises both the standalone `mcp__serena__*` form and the
+ * plugin-wrapped `mcp__plugin_<name>_serena__*` form via
+ * ./lib/serena.js#isLspProviderTool.
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { isLspProviderTool } = require('./lib/detect-lsp-provider');
+const { isLspProviderTool } = require('./lib/serena');
 
 const STATE_DIR = path.join(os.homedir(), '.claude', 'state');
 
@@ -33,13 +34,6 @@ function readFlag(fp) {
     if (Date.now() - (d.timestamp || 0) > 24 * 60 * 60 * 1000) return null;
     return d;
   } catch { return null; }
-}
-
-// cclsp-specific upstream bug (ktnyt/cclsp#43). Serena has its own LSP
-// wrapper and doesn't hit this class of error — skip the hint for non-cclsp.
-function isColdStartError(resp) {
-  const s = typeof resp === 'string' ? resp : JSON.stringify(resp || {});
-  return /No Project\.|ThrowNoProject|TypeScript Server Error|Server not initialized|Project not loaded|tsserver.*starting|LSP server.*not ready/i.test(s);
 }
 
 function isAnyError(resp) {
@@ -67,18 +61,6 @@ process.stdin.on('end', () => {
     if (!isLspProviderTool(toolName)) process.exit(0);
 
     const resp = data.tool_response || data.result || {};
-
-    // Cold-start hint only for cclsp (upstream bug)
-    if (toolName.startsWith('mcp__cclsp__') && isColdStartError(resp)) {
-      const isSymbolSearch = toolName.includes('find_workspace_symbols');
-      console.log(JSON.stringify({ systemMessage:
-        `⚠️ cclsp "No Project" error (known upstream bug ktnyt/cclsp#43)\n\n` +
-        `${isSymbolSearch ? 'find_workspace_symbols does NOT prime the project context.\n' : ''}` +
-        `Fix: call mcp__cclsp__get_diagnostics(<any .ts file>) first, then retry.\n` +
-        `This is an ordering bug, not a timing issue. Do NOT fall back to Grep.`
-      }));
-      process.exit(0);
-    }
 
     if (isAnyError(resp)) process.exit(0);
 

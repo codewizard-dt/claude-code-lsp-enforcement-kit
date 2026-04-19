@@ -98,11 +98,11 @@ process.stdin.on('end', () => {
   console.log(JSON.stringify({
     decision,
     reason: [
-      `LSP PRE-DELEGATION: ${agentLabel} without "## LSP CONTEXT".`,
+      `SERENA PRE-DELEGATION: ${agentLabel} without "## LSP CONTEXT".`,
       '',
       'DO THIS NOW (3 steps, then retry the Agent call):',
-      '1. mcp__cclsp__get_diagnostics("<any .ts file>")  — primes LSP',
-      '2. mcp__cclsp__find_workspace_symbols("<keyword from task>")  — finds symbols',
+      '1. mcp__serena__get_symbols_overview("<any project file>")  — primes Serena',
+      '2. mcp__serena__find_symbol("<keyword from task>")  — finds symbols',
       '3. Add to EVERY agent prompt:',
       '   ## LSP CONTEXT (pre-resolved — do NOT re-search)',
       '   - symbolName: defined at file.ts:42, called from a.ts:15',

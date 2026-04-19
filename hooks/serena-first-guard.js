@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 
-// lsp-first-guard.js — PreToolUse hook (matcher: Grep)
-// Blocks Grep on code symbols. Suggests LSP equivalent for the active provider.
+// serena-first-guard.js — PreToolUse hook (matcher: Grep)
+// Blocks Grep on code symbols. Suggests the equivalent Serena tool call.
 
-const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/detect-lsp-provider');
+const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/serena');
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -46,18 +46,18 @@ process.stdin.on('end', () => {
   }).join('\n');
 
   process.stderr.write(
-    `\n⛔ LSP-FIRST BLOCK: ${symbolParts.length} code symbol(s) in Grep — use LSP instead\n` +
-    `Symbols: ${symbolParts.join(', ')}\nLSP tools:\n${suggestions}\n\n`
+    `\n⛔ SERENA-FIRST BLOCK: ${symbolParts.length} code symbol(s) in Grep — use Serena instead\n` +
+    `Symbols: ${symbolParts.join(', ')}\nSerena tools:\n${suggestions}\n\n`
   );
 
   // Emit structured JSON for programmatic consumers (monitoring, dashboards, IDE plugins).
   // `decision` and `reason` fields remain backward compatible.
   const intent = /^[A-Z]/.test(symbolParts[0]) ? 'symbol_search' : 'references';
   console.log(JSON.stringify(buildStructuredBlockResponse({
-    hook: 'lsp-first-guard',
+    hook: 'serena-first-guard',
     symbols: symbolParts,
     intent,
-    reason: `LSP-FIRST: Pattern contains code symbol(s) [${symbolParts.join(', ')}]. Use LSP tools:\n${suggestions}`,
+    reason: `SERENA-FIRST: Pattern contains code symbol(s) [${symbolParts.join(', ')}]. Use Serena tools:\n${suggestions}`,
   })));
 });
 

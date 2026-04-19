@@ -38,10 +38,10 @@ Symbols: handleSubmit, UserService
 
 LSP tools:
   handleSubmit:
-    mcp__cclsp__find_references("handleSubmit")  (cclsp)
+    mcp__serena__find_referencing_symbols("handleSubmit")  (Serena)
 
   UserService:
-    mcp__cclsp__find_workspace_symbols("UserService")  (cclsp)
+    mcp__serena__find_symbol("UserService")  (Serena)
 ```
 
 When Claude tries to `Read` a code file without warming up LSP, the progressive gate blocks:
@@ -50,10 +50,10 @@ When Claude tries to `Read` a code file without warming up LSP, the progressive 
 🛡️  LSP-FIRST READ GATE — Gate 1: warmup required
 
   Call one of these first:
-    mcp__cclsp__get_diagnostics("src/page.tsx")  (cclsp)
+    mcp__serena__get_symbols_overview("src/page.tsx")  (Serena)
 
   CONCRETE CALL FOR THIS FILE (works in any project):
-    mcp__cclsp__get_diagnostics("src/page.tsx")
+    mcp__serena__get_symbols_overview("src/page.tsx")
 
   After warmup: 2 free Reads, then need LSP navigation.
 ```
@@ -97,7 +97,7 @@ Grep approach:
   Total: ~9,000 tokens, 4 tool calls
 
 LSP approach:
-  find_definition("handleSubmit") → form-actions.ts:42, ~80 tokens
+  find_symbol("handleSubmit") → form-actions.ts:42, ~80 tokens
   Read form-actions.ts:35-55 → ~150 tokens
   ─────────────────────────────────────
   Total: ~230 tokens, 2 tool calls
@@ -111,11 +111,11 @@ A rule in CLAUDE.md saying "use LSP" helps ~60% of the time. Hooks make it 100%.
 
 | Task | Grep approach | LSP approach | Saved |
 |------|--------------|--------------|-------|
-| Find definition of `handleSubmit` | Grep → 23 matches (~1500 tok) + 2 wrong Reads (~5000 tok) = **~6500 tok** | `find_definition` → file:line (~80 tok) + 1 targeted Read (~500 tok) = **~580 tok** | **91%** |
-| Find all usages of `UserService` | Grep → 15 matches (~1200 tok), scan results (~300 tok) = **~1500 tok** | `find_references` → 8 file:line pairs (~150 tok) = **~150 tok** | **90%** |
-| Check type of `formData` | Read full file (~2500 tok), search visually = **~2500 tok** | `get_hover` → type signature (~60 tok) = **~60 tok** | **98%** |
-| Find component `InviteForm` | Glob (~200 tok) + Grep (~800 tok) + Read wrong file (~2500 tok) = **~3500 tok** | `find_workspace_symbols` → exact location (~100 tok) = **~100 tok** | **97%** |
-| Who calls `validateToken`? | Grep → noisy results (~1500 tok) + 3 Reads to verify (~6000 tok) = **~7500 tok** | `get_incoming_calls` → caller list (~200 tok) + 1 Read (~500 tok) = **~700 tok** | **91%** |
+| Find definition of `handleSubmit` | Grep → 23 matches (~1500 tok) + 2 wrong Reads (~5000 tok) = **~6500 tok** | `find_symbol` → file:line (~80 tok) + 1 targeted Read (~500 tok) = **~580 tok** | **91%** |
+| Find all usages of `UserService` | Grep → 15 matches (~1200 tok), scan results (~300 tok) = **~1500 tok** | `find_referencing_symbols` → 8 file:line pairs (~150 tok) = **~150 tok** | **90%** |
+| Get overview of `form-actions.ts` | Read full file (~2500 tok), skim visually = **~2500 tok** | `get_symbols_overview` → top-level symbols (~120 tok) = **~120 tok** | **95%** |
+| Find component `InviteForm` | Glob (~200 tok) + Grep (~800 tok) + Read wrong file (~2500 tok) = **~3500 tok** | `find_symbol("InviteForm")` → exact location (~100 tok) = **~100 tok** | **97%** |
+| Who calls `validateToken`? | Grep → noisy results (~1500 tok) + 3 Reads to verify (~6000 tok) = **~7500 tok** | `find_referencing_symbols` → caller list (~200 tok) + 1 Read (~500 tok) = **~700 tok** | **91%** |
 
 ## 📊 Real-World Data: 1 Week, 2 Projects
 
@@ -136,67 +136,53 @@ Aggregate from a week of development across 2 TypeScript projects:
 - Without LSP: ~120 Greps + ~180 Reads = ~315k tokens for the same navigation work
 - With LSP: 39 nav calls + 53 targeted Reads = ~84k tokens
 
-## 🔌 Works with any LSP MCP server
-
-v2.1 introduces **provider-aware block messages**. The kit detects which LSP MCP server(s) you have installed and tailors its suggestions accordingly:
-
-- [**cclsp**](https://github.com/ktnyt/cclsp) — standalone MCP server or bundled via the `typescript-lsp` Claude Code plugin. Suggestions use `mcp__cclsp__find_definition`, `find_references`, `find_workspace_symbols`, etc.
-- [**Serena**](https://github.com/oraios/serena) — high-level symbol MCP server (MIT, by Oraios AI). Multi-language support (Python, Go, Rust, Java, TypeScript, Vue, and more via its bundled `solidlsp` wrapper). Suggestions use `mcp__serena__find_symbol`, `find_referencing_symbols`, `get_symbols_overview`.
-- **Both installed** — suggestions show entries for both providers.
-- **Neither installed** — generic fallback with install hints for both.
-
-Detection reads user-level Claude Code config (`~/.claude.json`, `~/.claude/settings.json`) and matches known server names. The shared helper is in `hooks/lib/detect-lsp-provider.js` — adding a new provider means adding one entry to its `PROVIDERS` registry, with no changes to the individual hooks.
-
 ## 🏗️ Architecture: 6 Hooks + 1 Tracker
 
 ```
                     PreToolUse                          PostToolUse
                     ──────────                          ───────────
 
- Grep call ──→ [lsp-first-guard.js] ──→ BLOCK
+ Grep call ──→ [serena-first-guard.js] ──→ BLOCK
                   detects code symbols,
-                  suggests LSP equivalent
+                  suggests Serena equivalent
 
- Glob call ──→ [lsp-first-glob-guard.js] ──→ BLOCK
+ Glob call ──→ [serena-first-glob-guard.js] ──→ BLOCK
                   blocks *UserService*, **/handleFoo*.ts;
                   allows *.ts, *subdomain*, src/**
 
- Bash(grep) ──→ [bash-grep-block.js] ──→ BLOCK
+ Bash(grep) ──→ [serena-bash-grep-block.js] ──→ BLOCK
                   catches grep/rg/ag/ack
                   in shell commands
 
- Read(.tsx) ──→ [lsp-first-read-guard.js] ──→ GATE
+ Read(.tsx) ──→ [serena-first-read-guard.js] ──→ GATE
                   5 progressive gates
                   (warmup → orient → nav → surgical)
 
- Agent(impl) ─→ [lsp-pre-delegation.js] ──→ BLOCK
+ Agent(impl) ─→ [serena-pre-delegation.js] ──→ BLOCK
                   subagents can't access MCP,
                   orchestrator must pre-resolve
 
- LSP call ─────────────────────────────────────→ [lsp-usage-tracker.js]
+ Serena call ──────────────────────────────────→ [serena-usage-tracker.js]
                                                    tracks nav_count,
                                                    read_count, state
 
                     SessionStart
                     ────────────
 
- New session ──→ [lsp-session-reset.js] ──→ WIPE
+ New session ──→ [serena-session-reset.js] ──→ WIPE
                     clears stale nav_count for current cwd,
                     forces fresh warmup + re-enforces gates
 ```
 
-> **v2 note:** versions before v2 had two silent bypass routes that let
-> Claude read code files without ever calling LSP:
-> (1) `Glob("*SymbolName*")` had no guard, and (2) `nav_count` persisted
-> for 24 h across sessions, so a new session inherited "surgical mode"
-> (unlimited reads) from yesterday's LSP work. Both are closed in v2 by
-> `lsp-first-glob-guard.js` and `lsp-session-reset.js`. If you installed
-> v1, re-run `bash install.sh` — it merges the new hooks without touching
-> your existing settings.
+> **v3 note:** the kit is Serena-only as of v3.0. If you installed an
+> earlier version, re-run `bash install.sh` — the installer unlinks the
+> old `lsp-*.js` hooks and `lib/detect-lsp-provider.js`, removes the
+> `typescript-lsp` plugin enablement, and installs the new `serena-*`
+> hooks plus `lib/serena.js`.
 
 ## 🔧 How Each Hook Works
 
-### 1. `lsp-first-guard.js` — Grep Blocker
+### 1. `serena-first-guard.js` — Grep Blocker
 
 **Hook type:** PreToolUse | **Matcher:** `Grep`
 
@@ -215,18 +201,16 @@ Intercepts every Grep call. Detects code symbols in the pattern. Blocks with a s
 | `*.md`, `*.json`, `*.sql` | non-code file glob | allow |
 | `.task/`, `node_modules/` | non-code path | allow |
 
-**Block message example** (with both cclsp and Serena detected):
+**Block message example:**
 ```
 ⛔ LSP-FIRST BLOCK: 1 code symbol(s) in Grep — use LSP instead
 Symbols: handleSubmit
 LSP tools:
   handleSubmit:
-    mcp__cclsp__find_references("handleSubmit")  (cclsp)
     mcp__serena__find_referencing_symbols("handleSubmit")  (Serena)
 ```
-If only one provider is installed, only that suggestion appears.
 
-### 2. `lsp-first-glob-guard.js` — Glob Symbol Blocker
+### 2. `serena-first-glob-guard.js` — Glob Symbol Blocker
 
 **Hook type:** PreToolUse | **Matcher:** `Glob`
 
@@ -248,9 +232,9 @@ The guard parses the glob pattern, extracts alphabetic tokens, and blocks if any
 | `tsconfig.json`, `next.config.ts` | framework config | allow |
 | `README.md` | docs | allow |
 
-**Allowed by design:** lowercase concept searches (`*auth*`, `*subdomain*`) are legitimate file discovery by topic. Only symbol-shaped tokens (casing patterns) are blocked, because those should use `find_workspace_symbols` instead.
+**Allowed by design:** lowercase concept searches (`*auth*`, `*subdomain*`) are legitimate file discovery by topic. Only symbol-shaped tokens (casing patterns) are blocked, because those should use `find_symbol` instead.
 
-### 3. `bash-grep-block.js` — Shell Grep Blocker
+### 3. `serena-bash-grep-block.js` — Shell Grep Blocker
 
 **Hook type:** PreToolUse | **Matcher:** `Bash`
 
@@ -258,7 +242,7 @@ Same detection logic, but for `Bash(grep "UserService" src/)`, `Bash(rg handleSu
 
 Allows: `git grep` (history search), non-code paths, non-code file type filters.
 
-### 4. `lsp-first-read-guard.js` — Progressive Read Gate
+### 4. `serena-first-read-guard.js` — Progressive Read Gate
 
 **Hook type:** PreToolUse | **Matcher:** `Read`
 
@@ -267,7 +251,7 @@ The most sophisticated hook. Forces a "navigate first, read targeted" workflow t
 ```
 Gate 1 — Warmup Required
   No LSP state file → BLOCK
-  Must call get_diagnostics(<any .ts file>) first
+  Must call get_symbols_overview(<the file you want to Read>) first
 
 Gate 2 — Free Orientation (reads 1-2)
   ALLOW — explore freely, no restrictions
@@ -291,20 +275,20 @@ Session starts
   │
   ├─ Read(page.tsx) → Gate 1 BLOCKS → "warmup required"
   │
-  ├─ get_diagnostics(file.ts) → tracker writes warmup_done=true
+  ├─ get_symbols_overview("page.tsx") → tracker writes warmup_done=true
   │
   ├─ Read(page.tsx) → Gate 2 allows (1 of 2 free)
   ├─ Read(actions.ts) → Gate 2 allows (2 of 2 free)
   ├─ Read(types.ts) → Gate 3 WARNS
   ├─ Read(helpers.ts) → Gate 4 BLOCKS
   │
-  ├─ find_workspace_symbols("MyFunc") → tracker: nav_count=1
+  ├─ find_symbol("MyFunc") → tracker: nav_count=1
   │
   ├─ Read(helpers.ts) → unlocked (reads 4-5)
   ├─ Read(utils.ts) → unlocked
   ├─ Read(service.ts) → Gate 5 BLOCKS
   │
-  ├─ find_references("MyFunc") → tracker: nav_count=2
+  ├─ find_referencing_symbols("MyFunc") → tracker: nav_count=2
   │
   └─ SURGICAL MODE — all Reads unlimited
 ```
@@ -317,7 +301,7 @@ Session starts
 
 **Dedup:** Reading the same file at different line ranges counts as 1 Read.
 
-### 5. `lsp-pre-delegation.js` — Agent Pre-Resolution
+### 5. `serena-pre-delegation.js` — Agent Pre-Resolution
 
 **Hook type:** PreToolUse | **Matcher:** `Agent`
 
@@ -349,23 +333,23 @@ Agent({
 | Standard | Implementation agents, worktree-isolated agents | BLOCK during implement phase |
 | Exempt | Reviewers, testers, planners, auditors | Never enforced (read-only) |
 
-### 6. `lsp-session-reset.js` — Stale State Wiper
+### 6. `serena-session-reset.js` — Stale State Wiper
 
 **Hook type:** SessionStart | **Matcher:** `true` (runs on every session start)
 
 The Read guard's state file (`~/.claude/state/lsp-ready-<cwd-hash>`) has a 24-hour expiry. Without this hook, a new session inherits yesterday's `nav_count` — and if that count was ≥ 2, the guard is permanently in **surgical mode** for today's session: unlimited Reads with zero LSP calls required. A full bypass of the enforcement chain.
 
-This hook runs once on session start and deletes the state file for the current cwd. The next Read triggers Gate 1 (warmup required), forcing at least one `get_diagnostics` call before any code file can be opened. After warmup, the standard progression kicks in (Gate 2 → 3 → 4 → 5) requiring real LSP navigation calls before surgical mode unlocks.
+This hook runs once on session start and deletes the state file for the current cwd. The next Read triggers Gate 1 (warmup required), forcing at least one `get_symbols_overview` call before any code file can be opened. After warmup, the standard progression kicks in (Gate 2 → 3 → 4 → 5) requiring real LSP navigation calls before surgical mode unlocks.
 
 **Session lifecycle with reset:**
 ```
 Session start
   │
-  ├─ lsp-session-reset.js → unlinks lsp-ready-<hash>
+  ├─ serena-session-reset.js → unlinks lsp-ready-<hash>
   │
   ├─ Read(page.tsx) → Gate 1 BLOCKS → "warmup required"
   │
-  ├─ get_diagnostics(file.ts) → tracker writes warmup_done=true
+  ├─ get_symbols_overview("page.tsx") → tracker writes warmup_done=true
   │
   ├─ Read × 2 (free) → Gate 3 warn → Gate 4 block → LSP nav → …
   │
@@ -374,11 +358,11 @@ Session start
 
 **Safety:** the hook only deletes the flag for the current cwd — other projects' state files are left alone. Failure is silent (never blocks session start).
 
-### 7. `lsp-usage-tracker.js` — State Tracker
+### 7. `serena-usage-tracker.js` — State Tracker
 
-**Hook type:** PostToolUse | **Matcher:** all `mcp__cclsp__*` tools
+**Hook type:** PostToolUse | **Matcher:** `mcp__serena__find_symbol|mcp__serena__find_referencing_symbols|mcp__serena__get_symbols_overview|mcp__serena__find_file|mcp__serena__search_for_pattern|mcp__serena__list_dir`
 
-Tracks successful LSP calls in a per-project state file. Other hooks read this state to make gate decisions.
+Tracks successful Serena calls in a per-project state file. Other hooks read this state to make gate decisions.
 
 **State file:** `~/.claude/state/lsp-ready-<md5-hash-of-cwd>`
 
@@ -390,11 +374,9 @@ Tracks successful LSP calls in a per-project state file. Other hooks read this s
   "read_count": 38,
   "read_files": ["src/page.tsx", "src/actions.ts"],
   "timestamp": 1775818285727,
-  "last_tool": "mcp__cclsp__find_references"
+  "last_tool": "mcp__serena__find_referencing_symbols"
 }
 ```
-
-**Cold start handling:** Detects the cclsp "No Project" error (upstream bug where `find_workspace_symbols` doesn't prime the TypeScript project). Emits a `systemMessage` with the correct fix — call a file-based tool first. It's an ordering bug, not a timing issue.
 
 ## 📦 Installation
 
@@ -412,13 +394,14 @@ Run bash install.sh in this repo to set up LSP enforcement hooks.
 ```
 
 The install script:
-- Copies 7 hooks + shared `lib/detect-lsp-provider.js` helper to `~/.claude/hooks/`
+- Copies 7 hooks + shared `lib/serena.js` helper to `~/.claude/hooks/`
 - Copies the LSP-first rule to `~/.claude/rules/`
 - **Merges** hook registrations into your existing `~/.claude/settings.json` (won't overwrite your other hooks)
-- Enables the built-in `typescript-lsp` plugin
+- Unlinks the old `lsp-*.js` hooks + `lib/detect-lsp-provider.js` if present (v2 cleanup)
+- Removes the `typescript-lsp` plugin from `enabledPlugins` (no longer used)
 - Creates `~/.claude/state/` for tracking
 - Verifies everything at the end
-- Safe to re-run: entries are deduped by command path, so upgrading from v1/v2.0 to v2.1 just adds what's missing without touching anything else
+- Safe to re-run: entries are deduped by command path, so upgrading from v2 to v3 just swaps hooks without touching your other settings
 
 ### Option 2: Run the script yourself
 
@@ -448,7 +431,6 @@ Output:
 
   Hooks installed:  7/7
   Rule installed:   yes
-  Plugin enabled:   yes
   State directory:  yes
 
 Done. Restart Claude Code to activate.
@@ -462,29 +444,18 @@ Done. Restart Claude Code to activate.
 #### Prerequisites
 
 - Claude Code (CLI, Desktop, or IDE extension)
-- TypeScript/JavaScript project
+- [Serena](https://github.com/oraios/serena) MCP server installed and connected
 
 #### Step 1: Copy files
 
 ```bash
-mkdir -p ~/.claude/hooks ~/.claude/state ~/.claude/rules
+mkdir -p ~/.claude/hooks/lib ~/.claude/state ~/.claude/rules
 cp hooks/*.js ~/.claude/hooks/
+cp hooks/lib/serena.js ~/.claude/hooks/lib/
 cp rules/lsp-first.md ~/.claude/rules/
 ```
 
-#### Step 2: Enable the plugin
-
-In `~/.claude/settings.json`, add to `enabledPlugins`:
-
-```json
-{
-  "enabledPlugins": {
-    "typescript-lsp@claude-plugins-official": true
-  }
-}
-```
-
-#### Step 3: Register hooks in settings.json
+#### Step 2: Register hooks in settings.json
 
 **IMPORTANT:** If you already have hooks, **add** these entries to your existing arrays — don't replace them.
 
@@ -493,23 +464,23 @@ Add to `PreToolUse` array:
 ```json
 {
   "matcher": "Grep",
-  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-first-guard.js" }]
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/serena-first-guard.js" }]
 },
 {
   "matcher": "Glob",
-  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-first-glob-guard.js" }]
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/serena-first-glob-guard.js" }]
 },
 {
   "matcher": "Bash",
-  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/bash-grep-block.js" }]
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/serena-bash-grep-block.js" }]
 },
 {
   "matcher": "Read",
-  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-first-read-guard.js" }]
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/serena-first-read-guard.js" }]
 },
 {
   "matcher": "Agent",
-  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-pre-delegation.js" }]
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/serena-pre-delegation.js" }]
 }
 ```
 
@@ -517,8 +488,8 @@ Add to `PostToolUse` array:
 
 ```json
 {
-  "matcher": "mcp__cclsp__find_definition|mcp__cclsp__find_references|mcp__cclsp__find_workspace_symbols|mcp__cclsp__find_implementation|mcp__cclsp__get_hover|mcp__cclsp__get_diagnostics|mcp__cclsp__get_incoming_calls|mcp__cclsp__get_outgoing_calls",
-  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-usage-tracker.js" }]
+  "matcher": "mcp__serena__find_symbol|mcp__serena__find_referencing_symbols|mcp__serena__get_symbols_overview|mcp__serena__find_file|mcp__serena__search_for_pattern|mcp__serena__list_dir",
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/serena-usage-tracker.js" }]
 }
 ```
 
@@ -527,7 +498,7 @@ Add to `SessionStart` array (create it if missing):
 ```json
 {
   "matcher": "true",
-  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/lsp-session-reset.js" }]
+  "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/serena-session-reset.js" }]
 }
 ```
 
@@ -552,14 +523,14 @@ LSP Enforcement Kit — Status
   Hook files:          ✓ 7/7
   Shared lib/helper:   ✓ yes
   Settings registered: ✓ PreToolUse(5) PostToolUse(1) SessionStart(1)
-  Detected providers:  ✓ cclsp
+  Detected providers:  ✓ serena
 
 State for current cwd (/path/to/project)
 ------------------------
   Warmup done:         yes
   nav_count:           5 (LSP navigation calls)
   read_count:          7 (unique code files read)
-  Last tool:           mcp__cclsp__find_references (2min ago)
+  Last tool:           mcp__serena__find_referencing_symbols (2min ago)
 
   ✓ Surgical mode active — all Reads unlimited for this session.
 
@@ -568,110 +539,44 @@ Diagnostic summary
   All checks passed. Enforcement is active.
 ```
 
-Or restart Claude Code and ask "Where is handleSubmit defined?" — Claude should use `find_definition`, not Grep.
+Or restart Claude Code and ask "Where is handleSubmit defined?" — Claude should use `find_symbol`, not Grep.
 
-## 📚 LSP Tool Reference
+## 📚 Serena Tool Reference
 
 | Tool | Question It Answers | Output |
 |------|-------------------|--------|
-| `find_definition` | Where is X defined? | file:line of definition |
-| `find_references` | Where is X used? | All file:line usages |
-| `find_workspace_symbols` | Find anything named X | All matching symbols in project |
-| `find_implementation` | What implements this interface? | Concrete implementations |
-| `get_incoming_calls` | What calls X? | All callers with file:line |
-| `get_outgoing_calls` | What does X call? | All callees with file:line |
-| `get_hover` | What type is X? | Type signature + docs |
-| `get_diagnostics` | Any errors in this file? | TypeScript errors/warnings |
+| `find_symbol` | Where is X defined? / find anything named X | Symbol(s) with file:line |
+| `find_referencing_symbols` | Where is X used? / what calls X? | All file:line references |
+| `get_symbols_overview` | What's in this file? | Top-level symbols with kinds |
+| `find_file` | Find file by name | Matching file paths |
+| `search_for_pattern` | Pattern search (non-symbol text) | Matches with context |
+| `list_dir` | What's in this directory? | Directory contents |
 
-## 🐍 Optional: Python, Go, Rust Support
+## 🌍 Multi-language support
 
-The built-in plugin only covers TypeScript/JavaScript. For other languages, install `cclsp` — a standalone MCP server that connects Claude Code to any Language Server:
+Serena bundles [`solidlsp`](https://github.com/oraios/serena), a unified wrapper around language servers for Python, Go, Rust, Java, TypeScript, Vue, PHP, Ruby, Swift, Elixir, Clojure, Bash, PowerShell, and more. Install Serena once and the hooks work across every language it supports — the enforcement logic detects code symbols by naming convention (PascalCase, camelCase, snake_case), not by language-specific AST.
 
-```bash
-npm install -g cclsp
-```
-
-Then install the language server for your language:
-
-```bash
-# Python
-pip install python-lsp-server
-
-# Go
-go install golang.org/x/tools/gopls@latest
-
-# Rust
-rustup component add rust-analyzer
-```
-
-Create `~/.config/claude/cclsp.json`:
-
-```json
-{
-  "servers": [
-    {
-      "extensions": ["py", "pyi"],
-      "command": ["pylsp"]
-    },
-    {
-      "extensions": ["go"],
-      "command": ["gopls", "serve"]
-    },
-    {
-      "extensions": ["rs"],
-      "command": ["rust-analyzer"]
-    }
-  ]
-}
-```
-
-Add to your Claude Code MCP config (`~/.claude.json`):
-
-```json
-{
-  "mcpServers": {
-    "cclsp": {
-      "type": "stdio",
-      "command": "cclsp",
-      "args": []
-    }
-  }
-}
-```
-
-The hooks work identically — they detect code symbols by naming convention, not by language. Once `cclsp` is connected, `find_definition`, `find_references`, etc. work across all configured languages.
+See the [Serena install guide](https://github.com/oraios/serena#installation) for setup.
 
 ## ❓ FAQ
 
+**Q: What MCP server do I need?**
+[Serena](https://github.com/oraios/serena) — multi-language symbol MCP server by Oraios AI (MIT). The kit is Serena-only as of v3.0. Block messages, warmup calls, and the usage tracker all reference `mcp__serena__*` tools exclusively.
+
 **Q: Does this work with Python/Go/Rust?**
-Out of the box — TypeScript/JavaScript only (built-in plugin). For other languages, install `cclsp` + the language server (see section above). The hooks themselves are language-agnostic.
+Yes. Serena's bundled `solidlsp` wraps language servers for Python, Go, Rust, Java, TypeScript, Vue, PHP, Ruby, Swift, Elixir, Clojure, Bash, PowerShell, and more. The hooks are language-agnostic — they detect symbols by naming convention.
 
 **Q: What if LSP gives wrong results?**
-The hooks don't eliminate Grep — they block Grep for *code symbols*. If LSP returns empty, Claude can still Grep with non-symbol patterns or search non-code files. The Read guard also gives 2 free reads before requiring navigation.
+The hooks don't eliminate Grep — they block Grep for *code symbols*. If Serena returns empty, Claude can still Grep with non-symbol patterns or search non-code files. The Read guard also gives 2 free reads before requiring navigation.
 
 **Q: Won't the Read gate slow down simple tasks?**
-After 2 LSP navigation calls, all gates open permanently (surgical mode). This happens within the first 30 seconds of a session. Non-code files (config, tests, docs) are never gated.
+After 2 Serena navigation calls, all gates open permanently (surgical mode). This happens within the first 30 seconds of a session. Non-code files (config, tests, docs) are never gated.
 
 **Q: Why block Agent delegation without LSP context?**
 Claude Code subagents cannot access MCP tools (architectural limitation). Without pre-resolved context, every delegated agent falls back to exploratory Grep+Read, burning thousands of tokens and bypassing all enforcement.
 
-**Q: Known issues?**
-`find_workspace_symbols` fails with "No Project" if called before any file-based LSP tool (cclsp upstream bug). The tracker detects this and tells Claude to call `get_diagnostics` first. Not a timing issue — ordering issue.
-
-**Q: I installed v1 and shared it with my team — should I upgrade?**
-Yes. v1 had two silent bypass routes (Glob symbol search and stale session state) that let Claude navigate code without ever calling LSP. Both are closed in v2. Just re-run `bash install.sh` — it's idempotent and only adds the missing hook entries to your `settings.json`. No existing configuration is touched.
-
-**Q: Does this work with Serena?**
-Yes. Since **v2.1**, the kit detects your LSP MCP provider and tailors its block-message suggestions. If you run [Serena](https://github.com/oraios/serena) (the multi-language MCP symbol toolkit by Oraios AI — MIT), the hooks will point you at `mcp__serena__find_symbol`, `find_referencing_symbols`, and `get_symbols_overview` instead of cclsp tools. The enforcement logic (Grep/Glob/Read/Agent gates, session reset) is provider-agnostic — it works the same for both. You can also run cclsp and Serena side-by-side; suggestions then show both.
-
-This is pure interop — the kit ships no Serena code, uses only their public tool names in suggestion strings, and reads only your own config to detect which provider is active.
-
-**Q: What about Python/Go/Rust? cclsp is TypeScript-only.**
-Two options:
-1. Install a standalone `cclsp` MCP server with multi-language config (see the "Optional" section above), OR
-2. Install [Serena](https://github.com/oraios/serena) — it bundles `solidlsp`, a unified wrapper around language servers for Python, Go, Rust, Java, TypeScript, Vue, PHP, Ruby, Swift, Elixir, Clojure, Bash, PowerShell, and more. The kit will detect Serena automatically and adapt its suggestions.
-
-The hook detection logic itself is language-agnostic — it works on naming conventions (PascalCase, camelCase, snake_case), not language-specific ASTs.
+**Q: I installed v2 and shared it with my team — should I upgrade?**
+Yes. v3 drops multi-provider detection in favour of Serena-only suggestions (cleaner block messages, smaller hook surface area, no provider-detection latency). Just re-run `bash install.sh` — it unlinks the old `lsp-*.js` hooks, removes the `typescript-lsp` plugin enablement, and installs the new `serena-*` hooks idempotently.
 
 ## 📄 License
 

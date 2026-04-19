@@ -18,7 +18,7 @@ Security issues in these hooks are taken seriously because:
 2. **Alternative:** email the maintainer via the GitHub profile contact at [@nesaminua](https://github.com/nesaminua).
 
 Please include:
-- Affected version(s) (`cat ~/.claude/hooks/lib/detect-lsp-provider.js | head -5` or the git tag you installed)
+- Affected version(s) (`cat ~/.claude/hooks/lib/serena.js | head -5` or the git tag you installed)
 - A minimal reproduction (example `tool_input` JSON that triggers the issue)
 - Impact assessment (fail-open bypass? information disclosure? ReDoS? arbitrary write?)
 - Your proposed fix (optional but appreciated)
@@ -36,10 +36,10 @@ We care about:
 
 ## Out of scope
 
-- Claude Code itself, the `cclsp`/Serena MCP servers, or the `typescript-lsp` plugin — report upstream.
+- Claude Code itself or the Serena MCP server — report upstream.
 - Bypasses via legitimate tools that are intentionally allowed (e.g. non-symbol `Grep` on lowercase phrases, `Bash(cat)`, `git grep`).
 - Theoretical vulnerabilities without a working reproduction.
-- The `lsp-session-reset.js` hook legitimately wiping stale state — that's the designed behaviour, not a bug.
+- The `serena-session-reset.js` hook legitimately wiping stale state — that's the designed behaviour, not a bug.
 
 ## Response
 

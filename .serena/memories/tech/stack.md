@@ -12,10 +12,7 @@
 
 ## Target integration
 - **Claude Code** (CLI, Desktop, IDE extensions). Uses Claude Code's hook system: `PreToolUse`, `PostToolUse`, `SessionStart` events with matchers.
-- **LSP MCP providers**:
-  - `cclsp` (standalone or bundled via `typescript-lsp` Claude Code plugin)
-  - `Serena` (multi-language, by Oraios AI — MIT)
-  - Both supported in parallel via the shared `detect-lsp-provider.js` registry.
+- **LSP MCP provider**: **Serena** (multi-language, by Oraios AI — MIT). Single provider as of v3.0. Shared helper: `hooks/lib/serena.js`. Block-message copy and PostToolUse tracker both reference `mcp__serena__*` exclusively; cclsp and the bundled `typescript-lsp` plugin were removed.
 
 ## Hook contract
 Each hook reads stdin (tool input JSON from Claude Code), processes, exits with:

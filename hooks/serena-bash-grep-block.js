@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 'use strict';
 
-// bash-grep-block.js — PreToolUse hook (matcher: Bash)
+// serena-bash-grep-block.js — PreToolUse hook (matcher: Bash)
 // Blocks grep/rg/ag/ack with code symbols in shell commands.
-// Suggests LSP equivalent for the active provider (cclsp / Serena / ...).
+// Suggests the equivalent Serena tool call.
 // Allows: git grep, non-code paths, non-code file types.
 
-const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/detect-lsp-provider');
+const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/serena');
 
 // Zero-width / formatting chars that would split tokens invisibly and
 // bypass ASCII regex symbol detection.
@@ -109,15 +109,15 @@ process.stdin.on('end', () => {
   }).join('\n');
 
   process.stderr.write(
-    `\n⛔ LSP-FIRST: Blocked grep/rg — found ${symbols.length} code symbol(s): ${symbols.join(', ')}\n` +
-    `LSP is always connected. Use:\n${suggestions}\n\n`
+    `\n⛔ SERENA-FIRST: Blocked grep/rg — found ${symbols.length} code symbol(s): ${symbols.join(', ')}\n` +
+    `Serena is always connected. Use:\n${suggestions}\n\n`
   );
 
   const intent = /^[A-Z]/.test(symbols[0]) ? 'symbol_search' : 'references';
   console.log(JSON.stringify(buildStructuredBlockResponse({
-    hook: 'bash-grep-block',
+    hook: 'serena-bash-grep-block',
     symbols,
     intent,
-    reason: `LSP-FIRST: Pattern contains code symbols [${symbols.join(', ')}]. Use LSP:\n${suggestions}`,
+    reason: `SERENA-FIRST: Pattern contains code symbols [${symbols.join(', ')}]. Use Serena:\n${suggestions}`,
   })));
 });

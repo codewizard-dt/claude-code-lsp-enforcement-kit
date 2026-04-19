@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const { buildWarmupInstructions, buildFileWarmupCall } = require('./lib/detect-lsp-provider');
+const { buildWarmupInstructions, buildFileWarmupCall } = require('./lib/serena');
 
 /**
  * Build a copy-pasteable warmup call parametrized by the exact file the
@@ -82,12 +82,12 @@ process.stdin.on('end', () => {
     const warmupLines = buildWarmupInstructions('  ').join('\n');
     const concrete = buildConcreteCall(filePath);
     emitBlock(
-      `⛔ LSP-FIRST BLOCK (Gate 1 — Warmup Required)\n\n` +
-      `Read on code file requires prior LSP warmup.\n\n` +
+      `⛔ SERENA-FIRST BLOCK (Gate 1 — Warmup Required)\n\n` +
+      `Read on code file requires prior Serena warmup.\n\n` +
       `WARMUP PROTOCOL — call one of these first:\n` +
       `${warmupLines}\n` +
       concrete +
-      `\nAfter warmup: ${FREE_READS} free Reads, then need LSP navigation.\n\n` +
+      `\nAfter warmup: ${FREE_READS} free Reads, then need Serena navigation.\n\n` +
       `Blocked: ${filePath}\n`
     );
   }
@@ -119,9 +119,9 @@ process.stdin.on('end', () => {
 
   if (nextReadNum === WARN_AT && navCount === 0) {
     emitWarning(
-      `⚠️ LSP-FIRST WARNING (Read ${nextReadNum}) — consider LSP navigation.\n` +
-      `Use find_workspace_symbols / find_references before more Reads.\n` +
-      `Next Read will be BLOCKED unless you use at least 1 LSP nav call.\n` +
+      `⚠️ SERENA-FIRST WARNING (Read ${nextReadNum}) — consider Serena navigation.\n` +
+      `Use mcp__serena__find_symbol / find_referencing_symbols before more Reads.\n` +
+      `Next Read will be BLOCKED unless you use at least 1 Serena nav call.\n` +
       `After 2 nav calls, all Reads are unlimited (surgical mode).`
     );
     readFiles.push(filePath);
@@ -134,8 +134,8 @@ process.stdin.on('end', () => {
 
   if (nextReadNum < REQUIRE_NAV_2_AT && navCount < 1) {
     emitBlock(
-      `⛔ LSP-FIRST BLOCK (Gate 4 — LSP Navigation Required)\n\n` +
-      `Read #${nextReadNum} requires at least 1 LSP navigation call.\n` +
+      `⛔ SERENA-FIRST BLOCK (Gate 4 — Serena Navigation Required)\n\n` +
+      `Read #${nextReadNum} requires at least 1 Serena navigation call.\n` +
       `After 1 nav call, Reads 4-5 unlock. After 2, unlimited.\n` +
       buildConcreteCall(filePath) +
       `\nBlocked: ${filePath}\n`
@@ -144,8 +144,8 @@ process.stdin.on('end', () => {
 
   if (nextReadNum >= REQUIRE_NAV_2_AT && navCount < 2) {
     emitBlock(
-      `⛔ LSP-FIRST BLOCK (Gate 5 — Surgical Mode Required)\n\n` +
-      `Read #${nextReadNum} requires at least 2 LSP navigation calls.\n` +
+      `⛔ SERENA-FIRST BLOCK (Gate 5 — Surgical Mode Required)\n\n` +
+      `Read #${nextReadNum} requires at least 2 Serena navigation calls.\n` +
       `Current: ${navCount} nav calls. Need 2.\n` +
       buildConcreteCall(filePath) +
       `\nBlocked: ${filePath}\n`

@@ -2,11 +2,11 @@
 'use strict';
 
 /**
- * lsp-first-glob-guard.js — PreToolUse hook (matcher: Glob)
+ * serena-first-glob-guard.js — PreToolUse hook (matcher: Glob)
  *
  * HARD BLOCK: Glob patterns that search for code symbols by filename.
- * Closes the gap where an agent bypasses lsp-first-guard (Grep matcher)
- * and lsp-first-read-guard (Read matcher) by using Glob to locate files
+ * Closes the gap where an agent bypasses serena-first-guard (Grep matcher)
+ * and serena-first-read-guard (Read matcher) by using Glob to locate files
  * containing a symbol name.
  *
  * Allowed:
@@ -20,12 +20,12 @@
  *   - camelCase symbol:          *createOrder*, *handleSubmit*
  *   - snake_case function (3+):  *get_user_sessions*, *write_audit_log*
  *
- * Philosophy: if you know the symbol name, use LSP (find_workspace_symbols
- *   for cclsp, find_symbol for Serena). Glob is for broad file discovery
- *   by extension or concept, not for symbol-based search.
+ * Philosophy: if you know the symbol name, use Serena's find_symbol. Glob
+ *   is for broad file discovery by extension or concept, not for
+ *   symbol-based search.
  */
 
-const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/detect-lsp-provider');
+const { buildSuggestion, buildStructuredBlockResponse } = require('./lib/serena');
 
 let raw = '';
 process.stdin.setEncoding('utf8');
@@ -63,11 +63,11 @@ process.stdin.on('end', () => {
   }).join('\n');
 
   const msg =
-    `\n⛔ LSP-FIRST BLOCK: Glob pattern contains ${symbolTokens.length} code symbol(s)\n` +
+    `\n⛔ SERENA-FIRST BLOCK: Glob pattern contains ${symbolTokens.length} code symbol(s)\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `Pattern: ${pattern}\n` +
     `Symbols: ${symbolTokens.join(', ')}\n\n` +
-    `LSP is always connected. Searching files by symbol name is LSP territory:\n` +
+    `Serena is always connected. Searching files by symbol name is Serena territory:\n` +
     `${suggestions}\n\n` +
     `If you need to find files by extension or concept, use lowercase\n` +
     `(e.g. "*subdomain*", "src/**/*.ts") — those are allowed.\n` +
@@ -77,10 +77,10 @@ process.stdin.on('end', () => {
 
   const intent = /^[A-Z]/.test(symbolTokens[0]) ? 'symbol_search' : 'references';
   console.log(JSON.stringify(buildStructuredBlockResponse({
-    hook: 'lsp-first-glob-guard',
+    hook: 'serena-first-glob-guard',
     symbols: symbolTokens,
     intent,
-    reason: `LSP-FIRST: Glob pattern contains code symbol(s) [${symbolTokens.join(', ')}]. Use LSP tools instead of filename-based symbol search.`,
+    reason: `SERENA-FIRST: Glob pattern contains code symbol(s) [${symbolTokens.join(', ')}]. Use Serena tools instead of filename-based symbol search.`,
   })));
 });
 
